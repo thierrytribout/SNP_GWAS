@@ -1,0 +1,28 @@
+# Makefile pour compiler le programme superGWAS
+
+comp_chemin= #/opt/intel/composer_xe_2013_sp1.1.106/bin/intel64/
+
+comp=ifort
+version=release
+
+  verslinux=/opt/intel/compilers_and_libraries_2016.1.150/linux
+    MKLINCLUDE=$(verslinux)/mkl/include/intel64_lin/ilp64
+    MKLLAPACK=$(verslinux)/mkl/lib/intel64_lin/libmkl_lapack95_ilp64.a
+    MKLBLAS=$(verslinux)/mkl/lib/intel64_lin/libmkl_blas95_ilp64.a
+    MKLLIB=$(verslinux)/mkl/lib/intel64_lin/libmkl_intel_ilp64.a  
+
+
+# options relase 
+opt_release_ifort=-O3 -mcmodel=large -zero -nbs -implicitnone -save -list
+
+# options test
+opt_test_ifort=-mcmodel=large -zero -nbs -implicitnone -save -list -CB -g -check all -traceback -warn -fpe0 -ftrapuv
+
+# choix test ou routine
+opt_comp=$(opt_$(version)_$(comp)) -mkl -lnag_mkl
+
+prog=SNP_GWAS_publi
+
+$(prog): $(prog).f90 
+	$(comp_chemin)$(comp) $(opt_comp) $(prog).f90 -o $(prog)
+
