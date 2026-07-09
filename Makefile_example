@@ -1,28 +1,22 @@
-# Makefile pour compiler le programme superGWAS
+# Makefile example to compile SNP_GWAS.f90 or Cumul_Res_SG.f90 code
+# uncomment below at #PROG the program you want to compile
+# comment below at PROG the other program not to be compiled
 
-comp_chemin= #/opt/intel/composer_xe_2013_sp1.1.106/bin/intel64/
+FC = ifort
 
-comp=ifort
-version=release
+VERSION ?= release
 
-  verslinux=/opt/intel/compilers_and_libraries_2016.1.150/linux
-    MKLINCLUDE=$(verslinux)/mkl/include/intel64_lin/ilp64
-    MKLLAPACK=$(verslinux)/mkl/lib/intel64_lin/libmkl_lapack95_ilp64.a
-    MKLBLAS=$(verslinux)/mkl/lib/intel64_lin/libmkl_blas95_ilp64.a
-    MKLLIB=$(verslinux)/mkl/lib/intel64_lin/libmkl_intel_ilp64.a  
+FFLAGS_release = -O3 -mcmodel=large -zero -nbs -implicitnone -save -list
 
+FFLAGS_debug   = -mcmodel=large -zero -nbs -implicitnone -save -list -CB -g -check all -traceback -warn -fpe0 -ftrapuv
 
-# options relase 
-opt_release_ifort=-O3 -mcmodel=large -zero -nbs -implicitnone -save -list
+FFLAGS = $(FFLAGS_$(VERSION)) -mkl
 
-# options test
-opt_test_ifort=-mcmodel=large -zero -nbs -implicitnone -save -list -CB -g -check all -traceback -warn -fpe0 -ftrapuv
+PROG = SNP_GWAS
+#PROG = Cumul_Res_SG
 
-# choix test ou routine
-opt_comp=$(opt_$(version)_$(comp)) -mkl -lnag_mkl
+$(PROG): $(PROG).f90
+	$(FC) $(FFLAGS) $< -o $@
 
-prog=SNP_GWAS_publi
-
-$(prog): $(prog).f90 
-	$(comp_chemin)$(comp) $(opt_comp) $(prog).f90 -o $(prog)
-
+clean:
+	rm -f $(PROG) *.o *.mod
