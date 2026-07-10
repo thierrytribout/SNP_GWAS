@@ -1,131 +1,36 @@
 !========================================================================
-program SNP_GWAS_publi
+program SNP_GWAS
   !=======================================================================
-  
-  ! !28/01/2026 : correction in log and removed unnecessary zeroing of DOSES
 
-  ! 05/09/2025 : modif pour compter le nb de SNPpar pour lesquels un individu a genotype inconnu (5) et les lister sur une seule ligne plutot que 1 SNP par ligne (LOG trop long)
+  ! SNP_GWAS
+  ! Copyright (C) 2026 Thierry Tribout and Didier Boichard
 
-  ! 04/09/2025 : modif test sur valeur de interm_4 avant calul PEV pour sta test effet variant :  qlq variants ont interm_4 calcule < 0 car ZpZ-interm_2 = negatif tres petit --> calcul de stat_test plante.
-  !              ces variants avaient StdDev(DOSE) tres proche de 0 (ex : 4.3E-8 --> on ne peut de toute maniere rien tirer de tels variants)
-  !              --> on remplace test if(interm_4 ne 0) par if(interm_4 > 0) car en theorie interm 4 ne peut pas etre negatif sauf si limite precision machine
-  !              + report des modifs faites par JVDP pour RUMIGEN (sans impact sur les resultats par rapport a version initiale TTR)
-
-  ! 03/09/2025 : modif pour allouer test_EffVarGWAS_1 (...)  meme si calcVarRes=exact sinon test combine sur calcVarRes=exact or > test_EffVarGWAS_1 > seuil plante
-
-  ! 02/09/2025 : correction bug  : on remplace test sur ecarttype(dose) diff 0 par presence d au moins 5 homozygotes xx et de 5 heterozygotes quand genotypes discrets
-  !              en STEP_3 sinon on passe au variant suivant
+  !  This program is free software: you can redistribute it and/or modify
+  !  it under the terms of the GNU General Public License as published by
+  !  the Free Software Foundation, either version 3 of the License, or
+  !  (at your option) any later version.
   !
-  !              Ajout d un test sur le signe de exp4_1 avant de calculer sqrt(exp4_1*  ) pour calculer le test approche de l effet estime du variant
-
-  ! 26/06/2025 : correction bug lorsque variant GWAS positionne apres le dernier SNPparente du chromosome avec option pour retirer SNPparente d une fenetre encadrant le variantGWAS
-
-
-  ! 17/01/2025 : home made function to calculate P-values from test staistics because problem with Burkardt function for very low p-values 
-
-  ! 17/12/2024 : COJO OPTION extended to add_dom model for GWAS
-
-  ! 27/11/2024 : NAG function G01ECF previously used to calculate p-values for Variants estimated effects replaced by free progf90 subroutines
-  !              chi_square_cdf gamma_cdf normal_01_cdf and function r8_gamma_inc written by John Burkardt under MIT licence
-
-  ! 20/11/2024 : on part du programme SNP_GWAS_rumigen_m2 du 19/11/2024 valide et dont la LOG a ete netoyee, et on retire tout ce qui est lie
-  !              aux modeles rumigen_m2 et mut_rec et tout ce qui est lie aux effets ROH (donc lecture fichier .hom, ...)
+  !  This program is distributed in the hope that it will be useful,
+  !  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  !  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  !
+  !  See the LICENSE file for more details.
 
 
-  ! 07/11/2024 : on traduit les messages de la LOG d execution en anglais ; version originale du programme avec messages en francais = SNP_GWAS_rumigen_m2_french.f90
-
-  ! 22/10/2024 = copie de superGWAS_vROH_outEffSNP.f90 renommee en SNP_GWAS_rumigen_m2 pour retirer parametres inutiles : NB_IND, NUMBER_OF_TRAITS, ...
-
-  ! compil avec options releasedesespoir = release mais on ajout -CB
-
-  ! sept 2024 : pour RUMIGEN : modification pour modele de GWAS RUMIGEN_M2 = eff_11vs12 + eff11Rvs12 + eff22vs12 + eff22Rvs12
-
-  ! 03/05/2024 : on modifie le programme pour permettre la lecture du fichier typages parente et carte typage parente au format PLINK
-
-  ! possibilite qu il y ait plus d individus dans fichier TYPAGES PARENTE que dans fichier PERF, car si format PLINK le fichier typages parente peut etre le meme que le fichier TYPAGES GWAS
-  !             permettre fichier parente et fichier carte parente format typ_eval ou format plink
-
-  ! on conditionne la présence de l effet ROH a la frequence des status ROH 0 et 1 du variant dans a population : par ex entre 5 et 95 pct pour que l effet soit estimable
-
-  ! 28/03/2024 : semble OK quand 1 seule lecture, mais probleme probable quand plusieurs lectures sur exemple 15 ind ???
-
-  ! 21/03/2024 : modif du programme pour etablir le statut ROH de chaque (variant x individu) a l etape 2 a partir du fichier typages_GWAS et du fichier PLINK (segmentsROH x individus) 
-
-  ! 07/03/2024 : on part de la version /g2b/ttribout/superGWAS/SRC4/superGWAS_V8sr_SFR.f90 pour ajouter l effet statut_ROH (0/1) dans la partie add et dom du modele --> se et test pour cet effet
-
-  ! modification du 28/07/2023 : modification pour ajouter une option permettant de realiser les GWAS sur des genotypes discrets (0 1 2) poiur les variants GWAS meme si on lit un
-  !                              fichier de DOSES format MINIMAC
-
-  ! modification du 28/07/2023 : modification de la version superGWAS_V8sr.f90 pour passer un modele comparant (homozygotes sauvages et heterozygotes) a (homozygotes mutes) au variant GWAS 
-  !                              pour tester determinisme recessif complet pour anomalies mortalite S FRITZ
-
-  ! modification du 27/07/2023 : on passe dimvec = longueur du vecteur inf_LEFT_EP en integer(kind=8) et on modifie calcul de dimvec et function TI(i,j,dimvec)
-  !                              car tentative de GWAS en conservant 47061 SNP plantait car dimvec devenait negatif en integer
-  !                              A priori pas d'incidence car DBO avait conserve 14205 SNPparente = une matrice de 200 000 000 elements --> integer suffisait 
-
-  ! modification du 11/04/2023 : on verifie en ETAPE 1 que les individus dans le fichier PERF (eventuellement avec une perf codee manquante) sont identiques aux individus du fichier TYPAGES_PARENTE
-
-  ! modification du 30/03/2023 : modif pour ajouter un variant specifie par utilisateur en effet fixe dans le modele pour voir si autres variants ont encore un effet significatif (approx COJO)
-  !                              ATTENTION : pour l instant on va considerer que le variant FIXE est sur le meme chromosome que les variants GWAS et qu on supprime tous les SNPpar du chromosome
-  !                                          cela simplifie les choses car on gere un seul set de SNPpar a supprimer comme quand pas COJO
-
-  ! modification du 28/03/2023 : on conditionne la presence de l EFFET DE DOMINANCE dans le modele pour un varGWAS (si demande par utilisateur) a valeur des doses / typages
-
-  ! modification du 20/03/2023 : on stocke les genotypes centrés aux SNPpar utiles pour tous les individus pour voir si gain de temps construction M' W M
-
-  ! 13/03/2023 : MODIF PARTIE 2 pour lire fichier DOSES_VAR_SEQ en plusieurs fois (par paquets de N_Var_SEQ pour reduire quantite de memoire necessaire a PARTIE 2
-
-  ! modification du 22/02/2023 : modification pour permettre de lire des fichiers de genotypes (nb alleles 2 portés = 0 1 2 ou 5=inconnu) AU LIEU DES DOSES
-
-  ! modification du 16/02/2023 : OPTION pour que l utilisateur puisse choisir le nb de SNPparente utilises dans les calculs
-
-  ! version V6 : on modifie pour permettre d avoir dans fichier DOSES lu dans partie 2 des individus absents du fichier PERF et du fichier TYPAGES_PARENTE
-  !              (evite de creer des fichiers doses de travail)
-
-  ! version V5_f : on ajoute une option pour calculer (1) la variance residuelle exacte pour chaque variant ou (2) une base de variance residuelle commune a tous les variants du Sous Groupe
-  !                ou (3) une base de variance commune pour tous les variants PUIS la variance residuelle exacte pour les variants dont le TEST avec variance residuelle approchee est > seuil
-
-  ! on cree des sous groupes de variants GWAS pour la partie 3 en fonction du nb de variants max par job fixe par l utilisateur
-
-  ! V5_d : on separe partie 3 (relecture ligne par ligne des doses dans fichier binaire et GWAS) de partie 2 (creation groupes d eclusion et ecriture fichier binaire doses)
-
-  ! dans V5_b on cree 1 fichier binaire Doses et 1 fichier parametres pour l execution de la partie 3 par groupe d exclusion de SNPparente
-
-  ! dans V5 on modifie programme pour creer un fichier sortie de DOSES par gourpe de VarGWAS appartenant au meme segment d exclusion de SNPpar
-  !     pour pouvoir en etape suivante lancer 1 job par segment d exclusion
-
-  ! dans cette version V2_fmat on fait les calculs pour obtenir inf_LEFT_EP_act avec des fonctions matricielles de BLAS pour essayer de reduire les temps de calcul
-
-  ! on intervertit l ordre des boucles sur eff1 et eff2 pour voir si gain de temps
-
-  ! dans cette version on inverse les dimensions de la table de genotypes SNP_PARENTE = GENOPAR pour voir si on gagne du temps
-
-  ! version non parallelisee ; partie inversion de LEFT_EP et partie GWAS sur variants non individualisees
-
-  ! dans cette version on n integre pas R-1 dans les MME, mais on utilise Rho = varRes/varGenet
-
-  ! 17/11/2022 : ATTENTION : VERIFIER LA FORMULE DE CALUL DE RANK
-
-  ! 09/11/2022 : inversion indirecte de LEFT_EP partielle a partir des blocs de inverse(LEFT_complet) valide
-
-  ! ATTENTION : POUR L INSTANT EN MONOCARACTERE
+  ! 09/07/2026 : new version SNP_GWAS V1.1 = code SNP_GWAS_publi_testAccel_lecVCF3_chNbThr_boucle.f90 08/07/2026 that can handle minimac4 VCF files
 
 
-
-  ! 03 oct 2022 : debut developpement 
- 
   implicit none
 
-  character(len=100),parameter:: title=' SNP_GWAS_publi software - version with blas lapack without NAG' 
+  !character(len=100),parameter:: title=' SNP_GWAS' 
 
-  character*15 fx1,fx2,fx22,fxcojo
+  character*15 fx1,fx2,fx22,fxcojo,fxvcf,temp_vcf
 
   character(len=128)::jour
-  integer::anlim=2046,mlim=04,jlim=01  ! date limite d executable = 01 avril 2046
 
-  logical testficdir
+  logical::testficdir,fin_lecture,is_var_useful,is_minimac
 
-  integer::i,j,k,d,ef,ef1,ef2,ind,ii
+  integer::i,j,k,d,ef,ef1,ef2,ind,ii,ttr
   integer::ip_snp
 
   !        Types of effects   
@@ -133,7 +38,7 @@ program SNP_GWAS_publi
        effcov=1     !or covariables 
 
 
-  integer::ioperf,iobilan,iocojo
+  integer::ioperf,iobilan,iocojo,ionldoses
 
   !        Types of random effects
   integer,  parameter ::  g_fixed=1,&       ! fixed effect
@@ -149,7 +54,7 @@ program SNP_GWAS_publi
        mapparfile, &     !name of map file for SNP used for breeding values / 4 colonnes : num_chromos / pos_sur_chrom / num_marker_dans_fich_typpar / INCLUSION-EXCLUSION PAR UTILISATEUR
        mapparfile_bis, &  !alternative name of map file for SNP used for breeding values / 4 colonnes : num_chromos / pos_sur_chrom / num_marker_dans_fich_typpar / INCLUSION-EXCLUSION PAR PROCEDURE AUTOMATIQUE
        typgwasfile, &     !name of genotypes file used for GWAS
-       fmttypgwas,&       !format du fichier typages pour les variants consideres dans les GWAS (pour l instant : minimac (doses) ou typ_eval (nb alleles 2 sans espaces) ou plink (nb alleles 2 avec espaces et colonnes suppl)
+       fmttypgwas,&       !format du fichier typages pour les variants consideres dans les GWAS (pour l instant : minimac3 (doses) ou minimac4 (doses) ou typ_eval (nb alleles 2 sans espaces) ou plink (nb alleles 2 avec espaces et colonnes suppl)
        mapgwasfile, &     !name of map file for SNP used for GWAS / Si format ne plink 4 colonnes : num_chromos / pos_sur_chrom / num_marker_dans_fich_typGWAS / utile_GWAS_0_1
                                 ! si formt PLINK 4 colonnes : num_chromos / nom variants GWAS (inutile) / position en cM (inutile) / position en pb
        cojofile, &       ! name of the file listing the SNP considered fixed in cojo analyses
@@ -162,7 +67,7 @@ program SNP_GWAS_publi
 
   character,parameter::tab=achar(9)
 
-  character (300) ::  chem_infos1, chem_bin0, chem_dosesCojo, rep_G_SG
+  character (300) ::  chem_infos1, chem_bin0, chem_dosesCojo, rep_G_SG, chem_nldoses
 
   character (25) :: suppl_cojo
 
@@ -182,6 +87,26 @@ program SNP_GWAS_publi
   integer::steptodo
 
   integer :: max_string_readline = 800 
+  !integer :: max_vcf_line = 10000000
+  character(len=10000000) :: vcfline
+  character(len=20),allocatable ::vecCharTemp1(:)
+  character(len=20),allocatable :: vecCharTemp2(:)
+  character(len=20)::format_VCF
+  integer            :: numfichvcf, nbfichvcf, nbIdVcfTemp
+  integer,allocatable::io_vcf(:)
+  integer,allocatable::nbIdVcf(:)
+  integer            :: nlvcf, nlvcf_prec, nbchamps, ncpId, numchr_vcf, max_Id, nbvarut, nbvarut_temp, nlvcf_temp,nlvcf_endblock
+  integer(kind=8):: pos_vcf
+  integer::blockvcf=2000
+  integer::k_temp
+  integer,allocatable::cumul_nbind_prev_vcf(:)
+  integer:: pos
+  character(len=100), allocatable :: champs_vcf(:)
+  character(len=1), parameter :: tab2 = char(9)
+  integer,allocatable::num_champ_premId(:),nb_champ_vcf(:),premLignevcf(:),numvarori(:)
+  integer::num_champ_premId_St3,premLignevcf_St3
+  real(kind=4),allocatable::vecTempDoses(:),vecTempDoses2(:)
+  real(kind=4),allocatable::matTempDoses2(:)
 
   integer::indic_cojo=0    ! indicates if there is (1) or not (0) a cojo variant in the GWAS
   integer::neq_cojo=0      ! = number of equations associated to the Cojo Variant (1 if add, 2 if add_dom)
@@ -192,7 +117,7 @@ program SNP_GWAS_publi
   integer :: ntrait=1                    !number of traits = TOUJOURS 1
   integer :: neff                        !number of effects excluding SNP effects for dirhyb and mathyb
 
-  integer :: nb_threads_mkl = 12   ! number of threads for MKL, default=12
+  integer :: nb_threads_mkl = 2   ! number of threads for MKL, default=2 car semble la valeur la plus efficace (initialement 12 mais temps CPU x2.5 !!!)
 
   real(kind=8) :: mis=-9999.0d0    !value of missing trait/effect
 
@@ -247,6 +172,9 @@ program SNP_GWAS_publi
        io_dosesCojo=63,& ! numero d unite pour le fichier qui va contenir les doses du variant Cojo cree en partie 2 et lu en partie 3
        io_infos0=64,&    ! numero d unite pour le fichiers informations sur tous les Groupes-SousGroupes de GWAS dans repertoire racine
        io_infos1=65,&    ! numero d unite pour les fichiers informations sur Groupes de GWAS intra sous_repertoire de sous-groupe
+       io_DosesUtil0=66,&    ! numero d unite pour le fichier dans repertoire racine contenant le vecteur DosesUtil pour STEP_3 avec fichiers VCF minimac4
+       io_ordinvdoses0=67,&    ! numero d unite pour le fichier dans repertoire racine contenant le vecteur ordinvdoses pour STEP_3 avec fichiers VCF minimac4
+       io_nldoses=71,&    ! numero d unite pour fichier dans repertoire racine contenant nb total individ avec dosages alleliques dans l ensemble fichiers VCF 
        io_dosesbin0=70   ! base de numero d unite pour les fichiers binaires de doses/typages variantsGWAS en sortie ou entree par groupe de SNPpar exclus
 
 
@@ -258,12 +186,15 @@ program SNP_GWAS_publi
   integer::data_len ! position de la derniere variable numerique utile du fichier DATA
   real(kind=8),allocatable::indata(:) ! one line of input data, only numeric fields
   real(kind=8),allocatable::y(:),weight_y(:),weight_cov(:,:) ! performances et poids des performances et covariables d une ligne du fichier DATA
-  real(kind=8),allocatable :: matWeight_Cov(:,:),matPERF(:,:),matPOIDS(:,:),vecPERFpond(:),vecPERFpond2(:) ! tables contenant les covariables, les perf et les poids des perf de l ensemble des individus
+  real(kind=8),allocatable :: matWeight_Cov(:,:),matPERF(:,:),matPOIDS(:,:),sqrt_matPOIDS(:,:),vecPERFpond(:) ! tables contenant les covariables, les perf et les poids des perf de l ensemble des individus
+  !real(kind=8),allocatable ::vecPERFpond2(:) ! semble ne plus etre utilisee ?
   integer::aniperf ! identifiant numerique de l individu en cours de traitement dans le fichier performances, FORCEMENT DE 1 a NBINDIVTOT SANS TROU
 
   integer(kind=1),allocatable::genopar(:,:),genopartemp(:)
 
-  real(kind=8),allocatable::SNPparUtCentr(:,:) ! genotypes centres aux SNPparente utilises dans les equations PREMULTIPLIES PAR SQRT(poids du phenotype de l individu)
+  real(kind=8),allocatable::SNPparUtCentr_St1(:,:) ! genotypes centres aux SNPparente utilises dans les equations PREMULTIPLIES PAR SQRT(poids du phenotype de l individu) pour STEP 1 dim = nbSNP,nbind
+  real(kind=8),allocatable::SNPparUtCentr_St3(:,:) ! genotypes centres aux SNPparente utilises dans les equations PREMULTIPLIES PAR SQRT(poids du phenotype de l individu) pour STEP 3 dim = nbind,nbSNP
+
   real(kind=8),allocatable::mattemp(:,:)  ! resultat de M' W M + I Rho, matrice temporaire
 
   character(200)::informatP1=''     ! chaine de caracteres qui recevra le format de lecture du fichier typages parente format typ_eval
@@ -304,6 +235,7 @@ program SNP_GWAS_publi
   integer,allocatable::MAPPAR(:,:) ! table carte marqueurs parente : 1ere col = num chrom / 2eme col = position en bp sur chromosome
   integer,allocatable::FL_PAR(:,:) ! table numero 1er et dernier marqueur parente de chaque chromosome
   integer::nlmappar,chrPrec,posPrec,numPrec
+  integer::nbVarInclSG
   integer::mappartemp(4)
   integer::iomappar
   integer,allocatable::incl_par(:)
@@ -335,8 +267,11 @@ program SNP_GWAS_publi
   character(len=((2*lc)+2))::IdDosesTemp
   character(len=4)::chdose
   integer::nldoses,pos_sup
+  integer::bufsize1=8192    ! size of character block read in subroutines read_block_buffer and read_block_DtG_buffer 
+  integer::length_max_line=10000000
   integer(kind=4),dimension(:),allocatable::orddoses,ordinvdoses
   integer(kind=4),allocatable::DosesUtil(:),indDosUt(:)
+  integer(kind=4)::ordinvdoses_temp,DosesUtil_temp
   integer(kind=4),allocatable::TypParUtil(:),indParUt(:)
   integer(kind=4),dimension(:),allocatable::ordTypPar,ordinvTypPar
   integer::indice_temp
@@ -348,8 +283,10 @@ program SNP_GWAS_publi
   real(kind=8)::MaxMem=1d+10 ! 10Go par defaut
   integer::nb_tranches,DosUtlues,DosUtTrav,nb_lectures,lecture
   integer,allocatable::cadre_lec_doses(:,:)
+  integer::prem_var,nb_var_ut_lus
   real(kind=8)::nDutLues
-  integer::meth_mpm=1   ! indicateur d option =1 si genotypes CENTRES aux SNPpar non stockes (plus long mais moins de memoire) ou =2 si  genotypes CENTRES aux SNPpar stockes (plus de memoire mais plus rapide ?)
+  integer::CentrGenoPar_st1=0   ! STEP 1 : indicateur d option =0 si genotypes CENTRES aux SNPpar non stockes (plus long mais moins de memoire) ou =1 si  genotypes CENTRES aux SNPpar stockes (plus de memoire mais plus rapide ?)
+  integer::CentrGenoPar_st3=0   ! STEP 3 : indicateur d option =0 si genotypes CENTRES aux SNPpar non stockes (plus long mais moins de memoire) ou =1 si  genotypes CENTRES aux SNPpar stockes (plus de memoire mais plus rapide ?)
   integer::doses_to_geno=0 ! indicateur d'option = 0 si l utilisateur veur conserver les doses pour varGWAS ou si il veut convertir doses en genotypes 0 1 2 
 
 
@@ -365,6 +302,7 @@ program SNP_GWAS_publi
   integer::neq_ep,neq_ep_2
   real(kind=8),allocatable::inf_LEFT_EP(:),vecGENO1(:),vecGENO2(:),vectemp(:)
   integer,allocatable::FIRSTNIV_EP(:)
+  integer::Icum,Icum1,Icum2
   real(kind=8)::val
 
 
@@ -389,7 +327,7 @@ program SNP_GWAS_publi
   integer,allocatable::vecTemDom(:)
   integer::coldom ! numero de colonne de l effet de dominance dans Z'Z
   !real(kind=8),allocatable::XpZMpZ(:,:) ! matrice [XpZ MpZ]
-  real(kind=8),allocatable::ZpXZpM(:,:) ! matrice [ZpXZpM]
+  real(kind=8),allocatable::ZpXZpM(:,:) ! TRANSPOSEE DE matrice [ZpXZpM]
   real(kind=8),allocatable::ZpZ(:,:) ! matrice [ZpZ]
   real(kind=8),allocatable::detZPZ(:)   ! determinant de la matrice ZpZ pour chaque varGWAS
   real(kind=8),allocatable::ZpY(:,:) ! matrice [ZpY]
@@ -405,6 +343,7 @@ program SNP_GWAS_publi
   ! declarations pour partie 3 si COJO=1
   real(kind=8),allocatable::col_cojo(:,:),row_cojo(:,:)
   real(kind=4),allocatable::vecDosesSD_cojo(:,:)
+  real(kind=8),allocatable::vecDoses_cojo(:,:)
   integer::numvar_cojo
   integer::nlcojo ! nombre de ligness dans le fichier des variants COJO (1 pour l instant)
   integer::temp3(3) ! vecteur temporaire
@@ -463,20 +402,12 @@ program SNP_GWAS_publi
   integer,allocatable::compttyp(:,:) ! nbre de genotypes 11 12 et 22 pour chaque variant pour determiner si on a une structure de donnees adaptee a l estimation des effets add et dom avec typages discrets
 
 
-  ! on verifie que la date limite d execution n est pas depassee
-  call fdate(jour)
-  call vversion(jour,anlim,mlim,jlim)  
-
-
   call fdate(jour)
 
   print*,'****************************************'
   print*,'*                                      *'
-  print*,'*           SNP_GWAS_publi             *' 
-  print*,'*    Version 28 jan 2026 LOG_english   *' 
-  print*,'*                                      *'
-  print*,'* This version uses a home made        *'
-  print*,'* function to compute pvalues          *'
+  print*,'*          SNP_GWAS V1.1               *' 
+  print*,'*       Version 08 jul 2026            *' 
   print*,'*                                      *'
   print*,'   ',jour
   print*,'*                                      *'
@@ -486,7 +417,7 @@ program SNP_GWAS_publi
 
 
 
-  ! on lit le fichier parametres
+  ! read parameter file
   call read_parameters_hm
 
   ! change defaults if optional parameters present and check positive definitness
@@ -547,8 +478,11 @@ program SNP_GWAS_publi
   print*,'data_len=',data_len
 
 
-  call mkl_set_num_threads(nb_threads_mkl) ! Pas sur que ca soit utile : c est ce ue jai mis dans HSSGBLUP pour PARDISO mais ils n en parlent pas dans la doc pour BLAS ni LAPACK ...
-
+  print*,' '
+  print*,'nb_threads_mkl = ',nb_threads_mkl
+  print*,' '
+  call mkl_set_num_threads(nb_threads_mkl) ! le nb de threads MKL est fixe a 2 par defaut et parametrable par "OPTION nb_threads_mkl N"
+  !call mkl_set_num_threads(2)   ! test 10/06/2026 pour voir si cela impacte les perf
 
 
 
@@ -571,15 +505,16 @@ program SNP_GWAS_publi
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   ! allocation des tables
-  allocate(matNivanim(neff,ntrait,nbind),matWeight_cov(neff,nbind),matPERF(nbind,ntrait),matPOIDS(nbind,ntrait),animperf(nbind),vecPERFpond(nbind))
-  allocate(vecPERFpond2(nbind))
+  allocate(matNivanim(neff,ntrait,nbind),matWeight_cov(neff,nbind),matPERF(nbind,ntrait),matPOIDS(nbind,ntrait),sqrt_matPOIDS(nbind,ntrait),animperf(nbind),vecPERFpond(nbind))
+  !allocate(vecPERFpond2(nbind))
   animperf=' '
   matNivanim=0
   matWeight_cov=0.0d0
   matPERF=0.0d0
   vecPERFpond=0.0d0
-  vecPERFpond2=0.0d0
-  matPOIDS=0.0d0
+  !vecPERFpond2=0.0d0
+  matPOIDS=0.0d0  ! on conserve l initialisation de matPOOIDS a 0 car on ne remplit que les termes pour lesquels l individu n a pas une perf manquante
+  sqrt_matPOIDS=0.0d0 ! on conserve l initialisation de sqrt_matPOOIDS a 0 car on calcule pendant remplissage de matPOIDS
   nbcarperf=0
   ioperf=0
 
@@ -665,8 +600,9 @@ program SNP_GWAS_publi
      do j=1,ntrait
         matPOIDS(aniperf,j)=weight_y(j)
         if(y(j).eq.mis) matPOIDS(aniperf,j)=0.0d0
-        vecPERFpond(aniperf)=matPERF(aniperf,j)*sqrt(matPOIDS(aniperf,j))
-        vecPERFpond2(aniperf)=matPERF(aniperf,j)*matPOIDS(aniperf,j)
+        sqrt_matPOIDS(aniperf,j) = dsqrt(matPOIDS(aniperf,j))
+        vecPERFpond(aniperf)=matPERF(aniperf,j)*sqrt_matPOIDS(aniperf,j)
+        !vecPERFpond2(aniperf)=matPERF(aniperf,j)*matPOIDS(aniperf,j)
      enddo
      do i=1,neff
         do j=1,ntrait
@@ -686,9 +622,11 @@ program SNP_GWAS_publi
   if(detailed_log.ge.2) then
      print*,' '
      print*,'For the first 10 individuals:'
-     print*,'numeric Id / matNivanim / matWeight_cov / matPERF / matPOIDS / vecPERFpond / vecPERFpond2 / animperf'
+     !print*,'numeric Id / matNivanim / matWeight_cov / matPERF / matPOIDS / vecPERFpond / vecPERFpond2 / animperf'
+     print*,'numeric Id / matNivanim / matWeight_cov / matPERF / matPOIDS / vecPERFpond / animperf'
      do i=1,min(10,nbind)
-        print*,i,' / ',matNivanim(:,1,i),' / ',matWeight_cov(:,i),' / ',matPERF(i,1),' // ',matPOIDS(i,1),' / ',vecPERFpond(i),' / ',vecPERFpond2(i),' // ',animperf(i)
+        !print*,i,' / ',matNivanim(:,1,i),' / ',matWeight_cov(:,i),' / ',matPERF(i,1),' // ',matPOIDS(i,1),' / ',vecPERFpond(i),' / ',vecPERFpond2(i),' // ',animperf(i)
+        print*,i,' / ',matNivanim(:,1,i),' / ',matWeight_cov(:,i),' / ',matPERF(i,1),' // ',matPOIDS(i,1),' / ',vecPERFpond(i),' // ',animperf(i)
      enddo
      print*,' '
   endif
@@ -1677,14 +1615,20 @@ program SNP_GWAS_publi
   GENOPARtemp=0
 
 
-  if( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) then  ! on a besoin de GENOPAR (en partie 3 de toute maniere) et (en partie 1 si meth_mpm=1)
+  if( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) then  ! on veut stocker les Genotypes Parente entiers NON centres en Step1 ou en Step3
      allocate(genopar(nbind,nbSNP))   ! on ne considere que les typages des individus utiles = individus avec perf --> nb lignes de la table genopar = nbind
      genopar=0
   endif
-  if((meth_mpm.eq.2).and.(steptodo.eq.1)) then
-     allocate(SNPparUtCentr(nbSNP,nbind))   ! on ne considere que les typages des individus utiles = individus avec perf --> nb colonnes de la table SNPparUtCentr = nbind
-     SNPparUtCentr=0.0d0
+  if((CentrGenoPar_st1.eq.1).and.(steptodo.eq.1)) then   ! on veut stocker les Genotypes Parente CENTRES en Step1
+     allocate(SNPparUtCentr_St1(nbSNP,nbind))   ! on ne considere que les typages des individus utiles = individus avec perf --> nb colonnes de la table SNPparUtCentr = nbind
+     SNPparUtCentr_St1=0.0d0
   endif
+  if((steptodo.eq.3).and.(CentrGenoPar_st3.eq.1)) then   ! on veut stocker les Genotypes Parente CENTRES en Step3
+     allocate(SNPparUtCentr_St3(nbind,nbSNP))   ! on ne considere que les typages des individus utiles = individus avec perf --> nb lignes de la table SNPparUtCentr = nbind
+     SNPparUtCentr_St3=0.0d0
+  endif
+
+
 
   nc=1
   io=0
@@ -1724,24 +1668,27 @@ program SNP_GWAS_publi
         do i=1,nbSNP_0
            if(SNP0toSNP(i).ne.0) then 
               if (GENOPARtemp(i).eq.0) then
-                 if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) )  GENOPAR(TypParUtil(nc),SNP0toSNP(i))=0
-                 if ((meth_mpm.eq.2).and.(steptodo.eq.1)) SNPparUtCentr(SNP0toSNP(i),TypParUtil(nc))= (0.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt(matPOIDS(TypParUtil(nc),1))
+                 if ( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i))=0
+                 if ((steptodo.eq.1).and.(CentrGenoPar_st1.eq.1)) SNPparUtCentr_St1(SNP0toSNP(i),TypParUtil(nc))= (0.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
+                 if ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.1)) SNPparUtCentr_St3(TypParUtil(nc),SNP0toSNP(i))= (0.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
               endif
               if (GENOPARtemp(i).eq.1) then
-                 if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i))=1
-                 if ((meth_mpm.eq.2).and.(steptodo.eq.1)) SNPparUtCentr(SNP0toSNP(i),TypParUtil(nc))= (1.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt(matPOIDS(TypParUtil(nc),1))
+                 if ( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i))=1
+                 if ((steptodo.eq.1).and.(CentrGenoPar_st1.eq.1)) SNPparUtCentr_St1(SNP0toSNP(i),TypParUtil(nc))= (1.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
+                 if ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.1)) SNPparUtCentr_St3(TypParUtil(nc),SNP0toSNP(i))= (1.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
               endif
               if (GENOPARtemp(i).eq.2) then
-                 if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i))=2
-                 if ((meth_mpm.eq.2).and.(steptodo.eq.1)) SNPparUtCentr(SNP0toSNP(i),TypParUtil(nc))= (2.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt(matPOIDS(TypParUtil(nc),1))
+                 if ( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i))=2
+                 if ((steptodo.eq.1).and.(CentrGenoPar_st1.eq.1)) SNPparUtCentr_St1(SNP0toSNP(i),TypParUtil(nc))= (2.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
+                 if ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.1)) SNPparUtCentr_St3(TypParUtil(nc),SNP0toSNP(i))= (2.0d0 - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
               endif
               ! on remplace arbitrairement typage inconnu par typage observe le plus frequent
               if ((GENOPARtemp(i).ne.0).and.(GENOPARtemp(i).ne.1).and.(GENOPARtemp(i).ne.2)) then
                  nbtypindet=nbtypindet+1 ! compteur de l individu
                  nbtypindet_tot=nbtypindet_tot+1 ! compteur total sur l ensemble des individus
-                 if( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) )  GENOPAR(TypParUtil(nc),SNP0toSNP(i)) = mostFreqTyp(i)
-                 if((meth_mpm.eq.2).and.(steptodo.eq.1))  SNPparUtCentr(SNP0toSNP(i),TypParUtil(nc))= (dfloat(mostFreqTyp(i)) - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt(matPOIDS(TypParUtil(nc),1))
-
+                 if ( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) GENOPAR(TypParUtil(nc),SNP0toSNP(i)) = mostFreqTyp(i)
+                 if ((steptodo.eq.1).and.(CentrGenoPar_st1.eq.1)) SNPparUtCentr_St1(SNP0toSNP(i),TypParUtil(nc))= (dfloat(mostFreqTyp(i)) - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
+                 if ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.1)) SNPparUtCentr_St3(TypParUtil(nc),SNP0toSNP(i))= (dfloat(mostFreqTyp(i)) - 2.0d0*freqUtil(SNP0toSNP(i)))*sqrt_matPOIDS(TypParUtil(nc),1)
                  liste_SNPpar_inco(nbtypindet)=i
                  !print*,'Genotyped individual =',NoNatTemp,' has genotype =',GENOPARtemp(i),' at Marker ',i
               endif
@@ -1775,7 +1722,7 @@ program SNP_GWAS_publi
   rewind(io_typpar)
 
 
-  if( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) then
+  if( ((CentrGenoPar_st1.eq.0).and.(steptodo.eq.1)) .or. ((steptodo.eq.3).and.(CentrGenoPar_st3.eq.0)) ) then
      if((nbind.lt.20).and.(nbSNP_0.lt.200)) then
         print*,' '
         print*,'GENOPAR matrix built only with Markers with MAF > MAFmin:'
@@ -2023,9 +1970,7 @@ program SNP_GWAS_publi
      !print*,'***************************************'
 
 
-
-     !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) then ! on construit M' W M sans avoir stocke les genotypes centres aux SNPpar
-     if (meth_mpm.eq.1) then ! on construit M' W M sans avoir stocke les genotypes centres aux SNPpar
+     if (CentrGenoPar_st1.eq.0) then ! on construit M' W M sans avoir stocke les genotypes centres aux SNPpar
 
         ! on remplit la partie (M' M) de LEFT_EP pour les marqueurs PARENTE
         allocate(vecGENO1(nbind),vecGENO2(nbind))
@@ -2041,10 +1986,14 @@ program SNP_GWAS_publi
         ! enddo
 
 
+        Icum=FIRSTNIV_EP(neff+1)-1
+
         do ef2=1,nbSNP
+           Icum2=Icum+ef2
            vecGENO2=dfloat(GENOPAR(:,ef2))-2.0d0*freqUtil(ef2)
 
            do ef1=1,nbSNP
+              Icum1=Icum+ef1
               ! on recentre les genotypes des nind individus pour le ef1 eme marqueur  
 
               if(ef2.le.ef1) then
@@ -2055,11 +2004,11 @@ program SNP_GWAS_publi
                  val = (dot_product(vecGENO1,vecGENO2))
 
                  if(ef1.ne.ef2) then
-                    inf_LEFT_EP(TI( FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef2-1 , neq_ep) ) = inf_LEFT_EP(TI( FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef2-1 , neq_ep) ) + val
+                    inf_LEFT_EP(TI( Icum1 , Icum2 , neq_ep) ) = inf_LEFT_EP(TI( Icum1 , Icum2 , neq_ep) ) + val
                  endif
 
                  if(ef1.eq.ef2) then
-                    inf_LEFT_EP(TI( FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef2-1 , neq_ep) ) = inf_LEFT_EP(TI( FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef2-1 , neq_ep) ) + val + Rho(1,1)
+                    inf_LEFT_EP(TI( Icum1 , Icum2 , neq_ep) ) = inf_LEFT_EP(TI( Icum1 , Icum2 , neq_ep) ) + val + Rho(1,1)
                  endif
 
               endif
@@ -2068,15 +2017,15 @@ program SNP_GWAS_publi
         enddo
         deallocate(vecGENO1,VECGENO2)
 
-     endif ! fin du test if (meth_mpm.eq.1)
+     endif ! fin du test if (CentrGenoPar_st1.eq.0)
 
-     !print*,'table SNPparUtCentr='
+     !print*,'table SNPparUtCentr_St1='
      !do i=1,nbSNP
-     !   print*,'SNPpar ',i,'genotypes centres = ',SNPparUtCentr(:,i)
+     !   print*,'SNPpar ',i,'genotypes centres = ',SNPparUtCentr_St1(:,i)
      !enddo
 
 
-     if(meth_mpm.eq.2) then ! on construit M' W M en ayant stocke les genotypes centres aux SNPpar
+     if(CentrGenoPar_st1.eq.1) then ! on construit M' W M en ayant stocke les genotypes centres aux SNPpar
 
         allocate(mattemp(nbSNP,nbSNP))
         print*,'allocation of mattemp done'
@@ -2085,10 +2034,12 @@ program SNP_GWAS_publi
            mattemp(i,i)= Rho(1,1)
         enddo
 
-        call dgemm('N','T',nbSNP,nbSNP,nltyppar,1.0d0,SNPparUtCentr,nbSNP,SNPparUtCentr,nbSNP,1.0d0,mattemp,nbSNP) ! le POIDS DES PHENOTYPES est deja integre
+        call dgemm('N','T',nbSNP,nbSNP,nltyppar,1.0d0,SNPparUtCentr_St1,nbSNP,SNPparUtCentr_St1,nbSNP,1.0d0,mattemp,nbSNP) ! le POIDS DES PHENOTYPES est deja integre
         print*,'after dgemm call'
+        Icum=FIRSTNIV_EP(neff+1)-1
         do ef1=1,nbSNP
-           inf_LEFT_EP( TI( FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef1-1 , neq_ep) : TI(FIRSTNIV_EP(neff+1)+ef1-1 , FIRSTNIV_EP(neff+1)+ef1-1 , neq_ep) + (nbSNP - ef1) ) = mattemp(ef1:nbSNP,ef1)
+           Icum1=Icum+ef1
+           inf_LEFT_EP( TI( Icum1 , Icum1 , neq_ep) : TI(Icum1 , Icum1 , neq_ep) + (nbSNP - ef1) ) = mattemp(ef1:nbSNP,ef1)
         enddo
         print*,'inf_LEFT_EP vector filled'
 
@@ -2099,7 +2050,7 @@ program SNP_GWAS_publi
 
         deallocate(mattemp)
 
-     endif ! fin du test if(meth_mpm.eq.2)
+     endif ! fin du test if(CentrGenoPar_st1.eq.1)
 
      print*,' '
      call fdate(jour)
@@ -2118,8 +2069,7 @@ program SNP_GWAS_publi
 
      ! on remplit la partie (M' W X) de LEFT_EP : les effets environnementaux (moyenne, effets fixes, cov, diag) sont AVANT les SNPparente donc on est toujours sous la diagonale --> TI(a,b):TI(a+nbSNP,b) est bien une plage continue du vecteur inf_LEFT_EP
 
-     !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) )  then
-     if (meth_mpm.eq.1) then
+     if (CentrGenoPar_st1.eq.0) then
         allocate(vecGENO1(nbSNP))
         vecGENO1=0.0d0
      endif
@@ -2128,23 +2078,20 @@ program SNP_GWAS_publi
      vectemp=0.0d0
 
      do ind=1,nbind
-        !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) then
-        if (meth_mpm.eq.1) then
+        if (CentrGenoPar_st1.eq.0) then
            vecGENO1=dfloat(GENOPAR(ind,:))-2.0d0*freqUtil(:)
         endif
         !print*,'Indiv',ind,'   vecGENO1=',vecGENO1
         do ef=1,neff
-           !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) ) vectemp=matPOIDS(ind,1)*matWeight_cov(ef,ind)*vecGENO1(1:nbSNP)
-           if (meth_mpm.eq.1) vectemp=matPOIDS(ind,1)*matWeight_cov(ef,ind)*vecGENO1(1:nbSNP)
-           if (meth_mpm.eq.2) vectemp=sqrt(matPOIDS(ind,1))*matWeight_cov(ef,ind)*SNPparUtCentr(:,ind)
+           if (CentrGenoPar_st1.eq.0) vectemp=matPOIDS(ind,1)*matWeight_cov(ef,ind)*vecGENO1(1:nbSNP)
+           if (CentrGenoPar_st1.eq.1) vectemp=sqrt_matPOIDS(ind,1)*matWeight_cov(ef,ind)*SNPparUtCentr_St1(:,ind)
 
            inf_LEFT_EP( TI( FIRSTNIV_EP(neff+1), (FIRSTNIV_EP(ef)+matNivAnim(ef,1,ind)-1) ,neq_ep) : TI (FIRSTNIV_EP(neff+1)+nbSNP-1 , (FIRSTNIV_EP(ef)+matNivAnim(ef,1,ind)-1) ,neq_ep)) = inf_LEFT_EP( TI( FIRSTNIV_EP(neff+1), (FIRSTNIV_EP(ef)+matNivAnim(ef,1,ind)-1) ,neq_ep) : TI (FIRSTNIV_EP(neff+1)+nbSNP-1 , (FIRSTNIV_EP(ef)+matNivAnim(ef,1,ind)-1) ,neq_ep))   + vectemp  ! M' W X
 
         enddo
      enddo
 
-     !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) )  deallocate(vecGENO1)
-     if (meth_mpm.eq.1)  deallocate(vecGENO1)
+     if (CentrGenoPar_st1.eq.0)  deallocate(vecGENO1)
 
      deallocate(vectemp)
 
@@ -2195,25 +2142,26 @@ program SNP_GWAS_publi
      enddo
 
      ! partie M'y
-     !if ( ((meth_mpm.eq.1).and.(steptodo.eq.1)) .or. (steptodo.eq.3) )  then
-     if (meth_mpm.eq.1)  then
+     if (CentrGenoPar_st1.eq.0)  then
         allocate(vecGENO1(nbind))
         vecGENO1=0.0d0
+        Icum=FIRSTNIV_EP(neff+1)-1
         do ef1=1,nbSNP
+           Icum1=Icum+ef1
            ! on recentre les genotypes des nind individus pour le ef1 eme marqueur 
            vecGENO1=(dfloat(GENOPAR(:,ef1))-2.0d0*freqUtil(ef1))*matPOIDS(:,1) ! un individu qui a perf manquante mais present dans fichier typages a POIDS=0 = ne contribuera pas
 
            val = dot_product(vecGENO1(:),matPERF(:,1))
 
-           RIGHT_EP(FIRSTNIV_EP(neff+1)+ef1-1) = RIGHT_EP(FIRSTNIV_EP(neff+1)+ef1-1) + val
+           RIGHT_EP(Icum1) = RIGHT_EP(Icum1) + val
         enddo
 
         deallocate(vecGENO1)
-     endif ! fin du test if (meth_mpm.eq.1)
+     endif ! fin du test if (CentrGenoPar_st1.eq.0)
 
-     if(meth_mpm.eq.2) then
-        call dgemv('N',nbSNP,nbind,1.0d0,SNPparUtCentr,nbSNP,vecPERFpond,1,0.0d0,RIGHT_EP(FIRSTNIV_EP(neff+1):FIRSTNIV_EP(neff+1)+nbSNP-1),1)
-     endif  ! fin du test if(meth_mpm.eq.2)
+     if(CentrGenoPar_st1.eq.1) then
+        call dgemv('N',nbSNP,nbind,1.0d0,SNPparUtCentr_St1,nbSNP,vecPERFpond,1,0.0d0,RIGHT_EP(FIRSTNIV_EP(neff+1):FIRSTNIV_EP(neff+1)+nbSNP-1),1)
+     endif  ! fin du test if(CentrGenoPar_st1.eq.1)
 
 
      print*,' '
@@ -2263,11 +2211,11 @@ program SNP_GWAS_publi
 
      ! on n a plus besoin de SNPparUtCentr ou de GENOPAR
 
-     if(meth_mpm.eq.1) then
+     if(CentrGenoPar_st1.eq.0) then
         deallocate(GENOPAR)
      endif
 
-     if(meth_mpm.eq.2) deallocate(SNPparUtCentr)
+     if(CentrGenoPar_st1.eq.1) deallocate(SNPparUtCentr_St1)
 
 
      print*,' '
@@ -2549,91 +2497,283 @@ program SNP_GWAS_publi
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-     !======================================================================================================================================
-     ! modif du 08 fev 2023 pour permettre d avoir DES INDIVIDUS SUPPLEMENTAIRES DANS FICHIER DOSES QUI SONT ABSENTS DE PERF ET TYPAGES_PAR
+! MODIF 28/05/2026 : lorsqu on travaille sur des fichiers vcf, l etape 2 ne lit plus ces fichiers VCF pour les separer en N fichiers binaires
+!                    (1 fichier binaire par sous-groupe) : on prepare simplement la lecture des fichiers VCF eb STPE_3 en creant des fichiers binaires contenant
+!                    les elements necessaires : nb indiv presents dans chaque fichier VCF, numero des ligns dans fichier CARTE_GWAS des variants GWAS utiles pour chaque sous-groupe (=DosesUtil()),
+!                    numero de ligne du variant COJO s il esxite dans le fichier CARTE_GWAS, cumul_nbind_prev_vcf(1:numfichvcf)
+!                    nbind, numero de la ligne precedant les dosages alleliques du premier variant dans les fichiers VCF (=premLignevcf_St3), 
+!                    ordinvdoses( ) pour trier les dosages des individus dans le meme ordre que le sperf et niveaux d effets
 
-     allocate(DOSEStemp(nlmapgwas),TypGwasTemp(nlmapgwas))
-     DOSEStemp=0.0
-     nldoses=0
-     TypGwasTemp=0
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! for NEW minimac4 VCF files = doses file where 1 line = 1 variant
+     if(trim(fmttypgwas).eq.'minimac4') then
 
+        print*,' '
+        print*,'Reading the top of all ',nbfichvcf,' VCF files'
 
-     open(io_doses,file=typgwasfile,status='old')
+        allocate(num_champ_premId(nbfichvcf))
+        allocate(nb_champ_vcf(nbfichvcf))
+        allocate(premLignevcf(nbfichvcf))
+        allocate(nbIdVcf(nbfichvcf))
 
-     ! on lit une 1ere fois le fichier DOSES pour lire les identifiants MINIMAC et couper la chaine en 2 pour retrouver l identifiant animal
+        num_champ_premId = 0
+        nb_champ_vcf     = 0
+        premLignevcf     = 0
+        nbIdVcf = 0
 
-     do
-        read(io_doses,*,iostat=io) 
-        if (io .ne. 0) exit
-        nldoses=nldoses+1
-     enddo
-     if(fmttypgwas.eq.'plink') nldoses=nldoses-1 ! on retire la 1ere ligne d en tetes qui est dans le fichier typages .raw de plink
-
-     rewind(io_doses)
-
-
-     allocate(animdoses(nldoses))
-
-     nldoses=0
-
-     if(trim(fmttypgwas).eq.'minimac') then
-        do
-           read(io_doses,*,iostat=io) IdDosesTemp
-           if (io .ne. 0) exit
-           nldoses=nldoses+1
-           ! on cherche la position du signe Superieur dans la chaine de caractere et on cree l identifiant reel en lisant la chaine de 1 a pos_sup
-           pos_sup=0
-           pos_sup=scan(IdDosesTemp,'>')
-           animdoses(nldoses)=IdDosesTemp(1:(pos_sup-2))
+        allocate(io_vcf(nbfichvcf))
+        io_vcf=0
+        do numfichvcf = 1, nbfichvcf
+           io_vcf(numfichvcf) = 80 + numfichvcf
+           write(fxvcf,'(i0)') numfichvcf
+           open(io_vcf(numfichvcf), file=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf', status='old')
         enddo
-        rewind(io_doses)
-     endif
 
 
 
-     if(trim(fmttypgwas).eq.'plink') then
-        read(io_doses,*,iostat=io) ! on lit la 1ere ligne d en tete qui ne sert a rien et qui est en alphanumerique
-        do
-           read(io_doses,*,iostat=io) NoNatTemp2 , NoNatTemp ! dans fichier .raw de plink l identifiant de l individu est en 2eme champ
-           if (io .ne. 0) exit
-           nldoses=nldoses+1
-           animdoses(nldoses)=NoNatTemp
+        do numfichvcf = 1, nbfichvcf
+
+           nlvcf = 0
+
+           do
+              read(io_vcf(numfichvcf),'(A)', iostat=io) vcfline
+              if (io /= 0) exit
+
+              nlvcf = nlvcf + 1
+
+              if (index(vcfline, '#CHROM') == 1) then
+
+                 premLignevcf(numfichvcf) = nlvcf
+
+                 ! Comptage des champs (= nb tabulations + 1)
+                 nbchamps = 1
+                 do j = 1, len_trim(vcfline)
+                    if (vcfline(j:j) == tab2) nbchamps = nbchamps + 1
+                 enddo
+                 nb_champ_vcf(numfichvcf) = nbchamps
+
+                 allocate(champs_vcf(nbchamps))
+                 champs_vcf = ' '
+
+                 read(vcfline,*, iostat=io) champs_vcf
+                 if (io /= 0) then
+                    print *, 'Erreur lecture champs VCF fichier ', numfichvcf
+                    stop
+                 endif
+
+                 ! Recherche du champ FORMAT
+                 ncpId = 0
+                 do j = 1, nbchamps
+                    if (trim(champs_vcf(j)) == 'FORMAT') then
+                       ncpId = j
+                       exit
+                    endif
+                 enddo
+
+                 if (ncpId == 0) then
+                    print *, 'FORMAT non trouve dans fichier ', numfichvcf
+                    stop
+                 endif
+
+                 num_champ_premId(numfichvcf) = ncpId + 1
+                 nbIdVcf(numfichvcf) = nbchamps - ncpId
+
+                 deallocate(champs_vcf)
+                 exit
+              endif
+
+           enddo
+
+           rewind(io_vcf(numfichvcf)) ! back to the top of the file for the second read at next step
+           !close(io_vcf)
+
         enddo
-        rewind(io_doses)
-     endif
 
-
-
-     if(trim(fmttypgwas).eq.'typ_eval') then
-        ! on lit la 1ere ligne du fichier pour repérer la position du 1er typage et creer le format de lecture pour la suite
-        read(io_doses,'(a3000000)',iostat=io) linetyp
-
-        len_linetyp=len_trim(linetyp)
-        d=len_linetyp
-        do while(linetyp(d:d).ne.' ')
-           d=d-1
+        ! we need a vector containing the Id of all individuals present in all the vcf files
+        nldoses = 0
+        do numfichvcf = 1, nbfichvcf
+           nldoses = nldoses + nb_champ_vcf(numfichvcf) - (num_champ_premId(numfichvcf) - 1)
         enddo
-        ip_snp=d+1
-        nb_varGWAS_fichtyp=len_linetyp-d
+        allocate(animdoses(nldoses))
 
-        write(informatT,'(a,i0,a,i0,a)') '(a',ip_snp-2,',1x,',nb_varGWAS_fichtyp,'i1)'
+        !print*,' '
+        !print*,'Number of individuals found in each of the ',nbfichvcf,' files :',nb_champ_vcf(:)
+        !print*,'Total number of individuals found the ',nbfichvcf,' files :',nldoses
 
-        if (detailed_log.eq.3) print*,'informatT=',informatT
+        ! on lit a nouveau le debut des fichiers vcf jusqu a la ligne premLignevcf(numfichvcf) pour remplir le vecteur animdoses
+        nbIdVCFtemp=0
+        do numfichvcf = 1, nbfichvcf
+           nlvcf = 0
+           do
+              read(io_vcf(numfichvcf),'(A)', iostat=io) vcfline
+              if (io /= 0) exit
+              nlvcf = nlvcf + 1
+              if(nlvcf.eq.premLignevcf(numfichvcf)) then ! we are on the line containing Ids
+                 allocate(champs_vcf(nb_champ_vcf(numfichvcf)))
+                 champs_vcf = ' '
+                 read(vcfline,*, iostat=io) champs_vcf
+                 if (io /= 0) then
+                    print *, 'Erreur lecture champs VCF fichier ', numfichvcf
+                    stop
+                 endif
+                 do j=num_champ_premId(numfichvcf),nb_champ_vcf(numfichvcf)
+                    nbIdVCFtemp=nbIdVCFtemp+1
+                    animdoses(nbIdVCFtemp)=champs_vcf(j)
+                 enddo
+                 deallocate(champs_vcf)
+                 exit
+              endif
+           enddo
+        enddo
+        if(nbIdVCFtemp.ne.nldoses) then
+           print*,'total number of individuals ',nbIdVCFtemp ,' found in the ',nbfichvcf,' VCF files is different from expected number ',nldoses
+           STOP 34
+        endif
+        print*,'Total number of Individuals found in the ',nbfichvcf,' files = ',nldoses
+        do numfichvcf = 1, nbfichvcf
+           print*,'VCF file #',numfichvcf,' contains allelic dosages for ',nbIdVcf(numfichvcf),' individuals'
+        enddo
+        print*,' '
 
-        print*,'Number of Variants read in Variant Genotype / allelic dosages file =',nb_varGWAS_fichtyp
+        allocate(cumul_nbind_prev_vcf(nbfichvcf))
+        cumul_nbind_prev_vcf=0
+        do i=2,nbfichvcf
+           cumul_nbind_prev_vcf(i)=sum(nbIdVcf(1:(i-1)))
+        enddo
+        print*,'cumul_nbind_prev_vcf = ',cumul_nbind_prev_vcf
+        print*,' '
 
-        rewind(io_doses)
+        ! checking that all VCF files have the same number of fields BEFORE the first individual
+        if(nbfichvcf.ge.2) then
+           do numfichvcf = 2, nbfichvcf
+              if(num_champ_premId(numfichvcf).ne.num_champ_premId(1)) then
+                 print*,' '
+                 print*,'PROBLEM : the vcf files do not ALL have the same format (number of columns before first animal)'
+                 STOP 35
+              endif
+           enddo
+        endif
+        num_champ_premId_St3=num_champ_premId(1) ! puisqu on a verifie qu il est identiue dans tous les fichiers VCF
+
+        ! checking that all VCF files have the same number of lines before the allelic dosages for first variant
+        if(nbfichvcf.ge.2) then
+           do numfichvcf = 2, nbfichvcf
+              if(premLignevcf(numfichvcf).ne.premLignevcf(1)) then
+                 print*,' '
+                 print*,'PROBLEM : the vcf files do not ALL have the same number of header lines before the allelic dosages'
+                 STOP 35
+              endif
+           enddo
+        endif
+        premLignevcf_St3 = premLignevcf(1) ! puisqu on a verifie que tous les fichiers vcf ont les dosages du premier variant sur la même ligne
+
+
+        ! on ecrit dans un fichier texte dans le repertoire racine la valeur de nldoses qui sera relu en STEP_3 pour dimensionner vecteurs ordinvdoses() et DosesUtil()
+        !chem_nldoses=trim(rep_G_SG)//trim("/nbind_tot_fichVCF.txt")    
+
+        open(io_nldoses,file="nbind_tot_fichVCF.txt",form="formatted")
+        write(io_nldoses,*) nldoses ! This file contains 1 single line
+        print*,' '
+        print*,'valeur de nldoses ',nldoses, ' ecrite dans fichier nbind_tot_fichVCF.txt pour STEP_3'
+        print*,' '
+        close(io_nldoses)
+
+
+     endif ! fin du test if(trim(fmttypgwas).eq.'minimac4')
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! for OTHER formats than minimac4 = doses file where 1 column = 1 variant
+     if(trim(fmttypgwas).ne.'minimac4') then
+
+        allocate(DOSEStemp(nlmapgwas),TypGwasTemp(nlmapgwas))
+        DOSEStemp=0.0
         nldoses=0
-        io=0
-        ! on lit le fichier 
+        TypGwasTemp=0
+
+        open(io_doses,file=typgwasfile,status='old')
+
+
+        ! on lit une 1ere fois le fichier DOSES pour lire les identifiants MINIMAC3 et couper la chaine en 2 pour retrouver l identifiant animal
         do
-           read(io_doses,informatT,iostat=io) NoNatTemp,TypGWASTemp(:)
+           read(io_doses,*,iostat=io) 
            if (io .ne. 0) exit
            nldoses=nldoses+1
-           animdoses(nldoses)=NoNatTemp
         enddo
+        if(fmttypgwas.eq.'plink') nldoses=nldoses-1 ! on retire la 1ere ligne d en tetes qui est dans le fichier typages .raw de plink
         rewind(io_doses)
-     endif
+
+
+        allocate(animdoses(nldoses))
+        nldoses=0
+
+
+
+        if(trim(fmttypgwas).eq.'minimac3') then
+           do
+              read(io_doses,*,iostat=io) IdDosesTemp
+              if (io .ne. 0) exit
+              nldoses=nldoses+1
+              ! on cherche la position du signe Superieur dans la chaine de caractere et on cree l identifiant reel en lisant la chaine de 1 a pos_sup
+              pos_sup=0
+              pos_sup=scan(IdDosesTemp,'>')
+              animdoses(nldoses)=IdDosesTemp(1:(pos_sup-2))
+           enddo
+           rewind(io_doses)
+        endif
+
+
+
+        if(trim(fmttypgwas).eq.'plink') then
+           read(io_doses,*,iostat=io) ! on lit la 1ere ligne d en tete qui ne sert a rien et qui est en alphanumerique
+           do
+              read(io_doses,*,iostat=io) NoNatTemp2 , NoNatTemp ! dans fichier .raw de plink l identifiant de l individu est en 2eme champ
+              if (io .ne. 0) exit
+              nldoses=nldoses+1
+              animdoses(nldoses)=NoNatTemp
+           enddo
+           rewind(io_doses)
+        endif
+
+
+
+        if(trim(fmttypgwas).eq.'typ_eval') then
+           ! on lit la 1ere ligne du fichier pour repérer la position du 1er typage et creer le format de lecture pour la suite
+           read(io_doses,'(a3000000)',iostat=io) linetyp
+
+           len_linetyp=len_trim(linetyp)
+           d=len_linetyp
+           do while(linetyp(d:d).ne.' ')
+              d=d-1
+           enddo
+           ip_snp=d+1
+           nb_varGWAS_fichtyp=len_linetyp-d
+
+           write(informatT,'(a,i0,a,i0,a)') '(a',ip_snp-2,',1x,',nb_varGWAS_fichtyp,'i1)'
+
+           if (detailed_log.eq.3) print*,'informatT=',informatT
+
+           print*,'Number of Variants read in Variant Genotype / allelic dosages file =',nb_varGWAS_fichtyp
+
+           rewind(io_doses)
+           nldoses=0
+           io=0
+           ! on lit le fichier 
+           do
+              read(io_doses,informatT,iostat=io) NoNatTemp,TypGWASTemp(:)
+              if (io .ne. 0) exit
+              nldoses=nldoses+1
+              animdoses(nldoses)=NoNatTemp
+           enddo
+           rewind(io_doses)
+        endif
+
+
+     endif ! end of test if(trim(fmttypgwas).ne.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+     !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! PART BELOW IS COMMON TO ALL fmttypgwas
 
      if (nldoses.ne.nbind) then
         print*,'WARNING : number of lines in Variant Genotype / allelic dosages is ',nldoses
@@ -2717,11 +2857,8 @@ program SNP_GWAS_publi
      endif
 
 
-
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
 
      ! modif V5 : segments de SNPpar recouvrant a 50pct a eliminer si option choisie par utilisateur
      allocate(nbSegmExcl(nbCHROMpar))
@@ -2934,7 +3071,7 @@ program SNP_GWAS_publi
 
      print*,'       '
      print*,'Table Bilan_SegmElim summarizing the information on Groups Batches and excluded Marker segments = '
-     print*,'Group Id / Id of 1st excludes Marker / Id of last excluded Marker / number of Variants in the Group / Number of Batches in Group'
+     print*,'Group Id / Id of 1st excluded Marker / Id of last excluded Marker / number of Variants in the Group / Number of Batches in Group'
      do i=1,nbSegmExcl(chrom_anal)
         print*,Bilan_SegmElim(i,:)
      enddo
@@ -2964,7 +3101,13 @@ program SNP_GWAS_publi
               Bilan_SousGr(6,nbSGr)= Bilan_SousGr(5,nbSGr) + (Bilan_Segmelim(i,4)-((j-1)*NbMaxVarGWAS)) -1
               k=Bilan_SousGr(6,nbSGr)
            endif
-           Bilan_SousGr(7,nbSGr)=(Bilan_SousGr(6,nbSGr) - Bilan_SousGr(5,nbSGr)) + 1
+           ! filling Bilan_SousGr(7,nbSGr) = number of VARIANTS to be considered in GWAS in step 3 considering INCL/EXCL value (1/0) in MAPGWAS table
+           Bilan_SousGr(7,nbSGr)=(Bilan_SousGr(6,nbSGr) - Bilan_SousGr(5,nbSGr)) + 1 ! A VERIFIER : est ce bien le nb de variants UTILES pour GWS ici ?
+           !nbVarInclSG=0     ! NB : il faudrait plutot compter ici le nb de variants UTILES = variants tels que INCL/EXCL = 1 dans MAP
+           !do ttr=(Bilan_SousGr(5,nbSGr)),(Bilan_SousGr(6,nbSGr))
+           !   if(MAPGWAS(3,ttr).eq.1) nbVarInclSG=nbVarInclSG+1
+           !enddo
+           !Bilan_SousGr(7,nbSGr)=nbVarInclSG ! = number of GWAS variants for which effect will be estmated in this batch in STEP3
         enddo
      enddo
 
@@ -2999,91 +3142,92 @@ program SNP_GWAS_publi
 
 
 
-
-
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! for OTHER formats than minimac4 = doses file where 1 column = 1 variant
 
      ! on relit le fichier DOSES pour stocker les doses UTILES dans un fichier ordonné par numero animal trie
 
-     ! ETAPE PRELIMINAIRE : on va eventuellement lire le fichier doses en plusieurs tranches de variants pour limiter les besoins en memoire 
-     !                      pour la table DOSES
+     if(trim(fmttypgwas).ne.'minimac4') then
+
+        ! ETAPE PRELIMINAIRE : on va eventuellement lire le fichier doses en plusieurs tranches de variants pour limiter les besoins en memoire 
+        !                      pour la table DOSES
+
+        nDutLues = MaxMem / ( dfloat(nbind)*4.0d0 )
+        !nDutLues=35 ! pour test 28/03/2024
+        if (nDutLues.ge.nbGWAS) nDutLues=nbGWAS
+        if(detailed_log.eq.3) print*,'Number of Variants nDutLues=',nDutLues
+
+        nb_tranches = INT( nDutLues  / dfloat(NbMaxVarGWAS)  )   ! nb_tranches = nombre de fichiers doses de NbMaxVarGWAS qu on va pouvoir remplir a chaque tour de lecture du fichier doses_varGWAS
+        if(detailed_log.eq.3) print*,'nb_tranches=',nb_tranches
+
+        DosUtLues = nb_tranches * NbMaxVarGWAS ! = nombre de doses utiles lues a chaque tour de lecture du fichier doses_varGWAS
+
+        nb_lectures=0
+        if (DosUtLues.ne.0) then
+           nb_lectures = CEILING( dfloat(nbGWAS) / (dfloat(DosUtLues)) )
+        endif
+
+        if (nDutLues.ge.nbGWAS) then
+           DosUtLues=nbGWAS
+           nb_lectures=1
+        endif
+
+        if(detailed_log.ge.2) print*,'DosUtLues=',DosUtLues
+        if(detailed_log.ge.2) print*,'nb_lectures=',nb_lectures
 
 
+        allocate(cadre_lec_doses(2,nb_lectures))
+        cadre_lec_doses=0
 
-     nDutLues = MaxMem / ( dfloat(nbind)*4.0d0 )
-     !nDutLues=35 ! pour test 28/03/2024
-     if (nDutLues.ge.nbGWAS) nDutLues=nbGWAS
-     if(detailed_log.eq.3) print*,'Number of Variants nDutLues=',nDutLues
+        if(nb_lectures.gt.1) then
+           do lecture=1,nb_lectures - 1
+              cadre_lec_doses(1,lecture) = ((lecture-1)*DosUtLues) + 1
+              cadre_lec_doses(2,lecture) = lecture*DosUtLues
+           enddo
+        endif
+        cadre_lec_doses(1,nb_lectures) = ((nb_lectures-1)*DosUtLues) + 1
+        cadre_lec_doses(2,nb_lectures) = nbGWAS
 
-     nb_tranches = INT( nDutLues  / dfloat(NbMaxVarGWAS)  )   ! nb_tranches = nombre de fichiers doses de NbMaxVarGWAS qu on va pouvoir remplir a chaque tour de lecture du fichier doses_varGWAS
-     if(detailed_log.eq.3) print*,'nb_tranches=',nb_tranches
-
-     DosUtLues = nb_tranches * NbMaxVarGWAS ! = nombre de doses utiles lues a chaque tour de lecture du fichier doses_varGWAS
-
-     nb_lectures=0
-     if (DosUtLues.ne.0) then
-        nb_lectures = CEILING( dfloat(nbGWAS) / (dfloat(DosUtLues)) )
-     endif
-
-     if (nDutLues.ge.nbGWAS) then
-        DosUtLues=nbGWAS
-        nb_lectures=1
-     endif
-
-     if(detailed_log.ge.2) print*,'DosUtLues=',DosUtLues
-     if(detailed_log.ge.2) print*,'nb_lectures=',nb_lectures
-
-
-     allocate(cadre_lec_doses(2,nb_lectures))
-     cadre_lec_doses=0
-
-     if(nb_lectures.gt.1) then
-        do lecture=1,nb_lectures - 1
-           cadre_lec_doses(1,lecture) = ((lecture-1)*DosUtLues) + 1
-           cadre_lec_doses(2,lecture) = lecture*DosUtLues
-        enddo
-     endif
-     cadre_lec_doses(1,nb_lectures) = ((nb_lectures-1)*DosUtLues) + 1
-     cadre_lec_doses(2,nb_lectures) = nbGWAS
-
-     if(detailed_log.ge.2) then
-        print*,' '
-        print*,'Table cadre_lec_doses :'
-        do i=1,nb_lectures
-           print*,'Read ',i,' ',cadre_lec_doses(:,i)
-        enddo
-        print*,' '
-     endif
-
-
-     allocate(DOSES(nbind,DosUtLues))
-     !DOSES=0.0 on n initialise pas la matrice DOSES a 0.0 ici car elle sera systematiquement re-initialisee a chaque debut de boucle lecture=1,nb_lectures
-     ! et si la matrice est grosse cette initialisation a 0 prend enormement de temps !!!
-
-
-     if(trim(fmttypgwas).eq.'plink') then
-        if(detailed_log.eq.3) then
+        if(detailed_log.ge.2) then
            print*,' '
-           print*,'Before allocation of vector vectemp5 firstVarGWAS=',firstVarGWAS
+           print*,'Table cadre_lec_doses :'
+           do i=1,nb_lectures
+              print*,'Read ',i,' ',cadre_lec_doses(:,i)
+           enddo
            print*,' '
         endif
 
-        allocate(vectemp5(firstVarGWAS))
-        vectemp5=0
-     endif
 
-     if((trim(fmttypgwas).eq.'typ_eval').or.(trim(fmttypgwas).eq.'plink')) then
-        allocate(freqTG(nbGWAS),nballelesTG(nbGWAS),mostfreqTG(nbGWAS))
-     endif
-     freqTG=0.0d0
-     nballelesTG=0.0d0
-     mostfreqTG=0.0d0
+        allocate(DOSES(nbind,DosUtLues))
+        !DOSES=0.0 on n initialise pas la matrice DOSES a 0.0 ici car elle sera systematiquement re-initialisee a chaque debut de boucle lecture=1,nb_lectures
+        ! et si la matrice est grosse cette initialisation a 0 prend enormement de temps !!!
 
 
+        if(trim(fmttypgwas).eq.'plink') then
+           if(detailed_log.eq.3) then
+              print*,' '
+              print*,'Before allocation of vector vectemp5 firstVarGWAS=',firstVarGWAS
+              print*,' '
+           endif
+
+           allocate(vectemp5(firstVarGWAS))
+           vectemp5=0
+        endif
+
+        if((trim(fmttypgwas).eq.'typ_eval').or.(trim(fmttypgwas).eq.'plink')) then
+           allocate(freqTG(nbGWAS),nballelesTG(nbGWAS),mostfreqTG(nbGWAS))
+           freqTG=0.0d0
+           nballelesTG=0.0d0
+           mostfreqTG=0.0d0
+        endif
+
+     endif ! end of test if(trim(fmttypgwas).ne.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     ! SECTION OF CODE BELOW IS COMMON TO ALL fmttypgwas minimac3 minimac4 plink typeval
 
      ! on cree un sous repertoire par groupe d exclusion de SNPparente dans lequel on mettra le fichier binaire des doses de ces VarGWAS et le fichier parametres pour partie 3
      do i=1,nbSegmExcl(chrom_anal)
@@ -3122,7 +3266,6 @@ program SNP_GWAS_publi
         open(io_infos0,file=trim("cojo_")//trim(fxcojo)//trim("/Infos_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
      endif
 
-
      batch=1
      write(fx1,'(i0)') chrom_anal
      write(fx2,'(i0)') Bilan_SousGr(1,batch)
@@ -3141,261 +3284,501 @@ program SNP_GWAS_publi
      chem_infos1=trim(rep_G_SG)//trim("/Infos_GrVar.txt")
      open(io_dosesbin0,file=trim(chem_bin0),form="unformatted")
      open(io_infos1,file=trim(chem_infos1),form="formatted")
-     write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
-     write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
 
 
+! END OF SECTION COMMON TO ALL fmtgwastype
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-     !=============================================================================================================================================================
-     !=============================================================================================================================================================
-     !=============================================================================================================================================================
-     ! DEBUT DE LA BOUCLE SUR LES nb_lectures LECTURES DU FICHIER DOSES_VARGWAS
 
-     do lecture=1,nb_lectures
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     if(trim(fmttypgwas).eq.'minimac4')then
 
-        DOSES=0.0
+        ! si on travaille sur fichiers VCF minimac4 on ouvre fichiers qui vont contenir les vecteurs DosesUtil et ordinvdoses pour ordonner les doses en STEP_3
+        !if(trim(fmttypgwas).eq.'minimac4')then
+           if(indic_cojo.eq.0) then
+              open(io_DosesUtil0,file=trim("vec_DosesUtil_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+              open(io_ordinvdoses0,file=trim("vec_ordinvdoses_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+           endif
+           if(indic_cojo.eq.1) then
+              write(fxcojo,'(i0)') numvar_cojo
+              ! call system("mkdir -p "//trim("cojo_")//trim(fxcojo)) ! directory already created just above for io_infos0
+              open(io_DosesUtil0,file=trim("cojo_")//trim(fxcojo)//trim("/vec_DosesUtil_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+              open(io_ordinvdoses0,file=trim("cojo_")//trim(fxcojo)//trim("/vec_ordinvdoses_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+           endif
+        !endif
 
-        nldoses=0
+        allocate(vecCharTemp1(num_champ_premId(1)-4)) ! temporary vector containing the first fields before dosages ; assume all vcf files have the same columns before animals dosages
+        max_Id = maxval(nbIdVcf)
+        print*,'Max number of individuals found in the ',nbfichvcf,' VCF files =',max_Id
 
-        if(lecture.lt.nb_lectures) DosUtTrav=DosUtLues
-        if(lecture.eq.nb_lectures) DosUtTrav= nbGWAS - (DosUtLues*(nb_lectures-1))     ! si on est dans la derniere lecture le nb de VarGWAS utiles lues est le nb de varGWAS restant
+        allocate(numvarori(blockvcf))
+
+
+        fin_lecture = .false.
+        nlvcf = 0
+        nlvcf_temp=0          ! counts the number of the line within pack of blockvcf lines when reading the VCF files by packs of blockvcf lines
+        batch=1               ! initialise the number of current batch of usefull variants
+        nbvarut=0             ! nb useful variants read
+        nbvarut_temp=0  
+        nlvcf_endblock=0
+
+        write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch),premLignevcf_St3,num_champ_premId_St3,nldoses,nbIdvcf(:),cumul_nbind_prev_vcf(:)
+        
+        ! 01/06/2026 : on n ecrit que les infos initiales, et on ne prolonge plus la ligne avec les infos utiles en STEP_3
+        write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+
+        do i=1,nldoses
+           write(io_DosesUtil0,*) DosesUtil(i)
+        enddo
+        do i=1,nldoses
+           write(io_ordinvdoses0,*) ordinvdoses(i)
+        enddo
+
+        close(io_DosesUtil0)
+        close(io_ordinvdoses0)
 
         print*,' '
-        print*,'Current number of reading pass of Variant Genotypes / allelic dosages doses_varGWAS = ',lecture,'  DosUtTrav = ',DosUtTrav
-        PRINT*,' '
+        print*,'fichiers contenant les vecteurs DosesUtil et ordinvdoses necessaires pour STEP_3 avec fichiers VCF minimac4 crees'
+        print*,' '
 
-        if(trim(fmttypgwas).eq.'minimac') then
-           do
-              read(io_doses,*,iostat=io) IdDosesTemp,chdose,DOSEStemp
-              if (io .ne. 0) exit
-              nldoses=nldoses+1
-              if(DosesUtil(ordinvdoses(nldoses)).ne.0) then ! l individu est dans le fichier PERF donc ses doses sont utiles
-                 indice_temp=DosesUtil(ordinvdoses(nldoses))
-                 !do i=1,nbGWAS
-                 if(doses_to_geno.eq.0) then  ! on va faire les GWAS sur les doses
-                    do i=1,DosUtTrav
-                       DOSES(indice_temp,i)= DOSEStemp(GWASuttoMAP( cadre_lec_doses(1,lecture)-1 + i ))
-                    enddo
+        do while (.not. fin_lecture)
+
+           !is_var_useful = .false.                              ! initialise for the new variant that will be read
+           !is_var_useful_temp = .false.
+   
+           k = 0 ! nb individuals
+           k_temp = 0
+
+           !------------------------
+           ! Lecture du debut de ligne de chaque fichier VCF pour verifier que les variants sont bien ordonnes et coherents avec le fichier CARTE_GWAS et que le format est bien 'GT:DS'
+           !------------------------
+           do numfichvcf = 1, nbfichvcf ! the VCF are already open and the first lines including the line with individuals Id have already been read
+
+              !print*,'Tem fich VCF numero ',numfichvcf
+
+              nbvarut_temp=0
+              numvarori=0
+
+              if(numfichvcf.ne.1) nlvcf = nlvcf - nlvcf_endblock
+
+              do nlvcf_temp=1,blockvcf
+                 !print*,'Tem nlvcf_temp = ',nlvcf_temp
+
+                 read(io_vcf(numfichvcf),*, iostat=io) numchr_vcf,pos_vcf,vecCharTemp1,format_vcf
+                 if (io /= 0) then
+                    fin_lecture=.true.
+                    exit
                  endif
-                 if(doses_to_geno.eq.1) then  ! on va faire les GWAS sur des genotypes discrets 0 1 2  reconstitues a partir des doses
-                    do i=1,DosUtTrav
-                       if(DOSEStemp(GWASuttoMAP( cadre_lec_doses(1,lecture)-1 + i )).le.0.5)  DOSES(indice_temp,i)= 0.0
-                       if((DOSEStemp(GWASuttoMAP( cadre_lec_doses(1,lecture)-1 + i )).gt.0.5).and.(DOSEStemp(GWASuttoMAP( cadre_lec_doses(1,lecture)-1 + i )).lt.1.5))  DOSES(indice_temp,i)= 1.0
-                       if(DOSEStemp(GWASuttoMAP( cadre_lec_doses(1,lecture)-1 + i )).ge.1.5)  DOSES(indice_temp,i)= 2.0
-                    enddo
+
+                 !if(numfichvcf.eq.1) then
+                    nlvcf=nlvcf+1 ! new ligne in all the vcf files
+                    !print*,'Tem nlvcf = ',nlvcf
+                    if(nlvcf.gt.nlmapgwas) then
+                       print*,' '
+                       print*,'PROBLEM : VCF files contain more variants than GWAS variant MAP file'
+                       print*,'CHECK CONSISTENCY BETWEEN MAP FILE AND VCF FILES'
+                       STOP 37
+                    endif
+                 !endif
+
+                 if(MAPGWAS(1,nlvcf).ne.numchr_vcf) then
+                    print*,' '
+                    print*,'nlvcf=',nlvcf,' MAPGWAS(1,nlvcf)=',MAPGWAS(1,nlvcf),' numchr_vcf=',numchr_vcf
+                    print*,'PROBLEM : Variant Chromosom in GWAS variant MAP file and in VCF file number ',numfichvcf,' are not consistent'
+                    print*,'CHECK CONSISTENCY BETWEEN VARIANTS IN MAP FILE AND IN VCF FILES'
+                    STOP 37
+                 endif
+                 if(MAPGWAS(2,nlvcf).ne.pos_vcf) then
+                    print*,' '
+                    print*,'nlvcf=',nlvcf,' MAPGWAS(2,nlvcf)=',MAPGWAS(2,nlvcf),' pos_vcf=',pos_vcf
+                    print*,'PROBLEM : Variant positions in GWAS variant MAP file and in VCF file number ',numfichvcf,' are not consistent'
+                    print*,'CHECK CONSISTENCY BETWEEN VARIANTS IN MAP FILE AND IN VCF FILES'
+                    STOP 37
                  endif
 
-              endif
-           enddo
+                 if(MAPGWAS(3,nlvcf).eq.1) then                     ! User indicated the variant has to be considered in GWAS in STEP3
+                    !if(numfichvcf.eq.1) then                        ! only for the first VCF file
+                    !   is_var_useful=.true.                         ! updates the value for the new considered variant
+                    !   nbvarut = nbvarut+1                          ! increase nb of usefull variants read
+                    !   is_var_useful_temp(nlvcf_temp)=.true.
+                    !endif
 
-           print*,' '
-           print*,'Number of lines read in Variant Genotype / allelic dosage file during this reading pass : ',nldoses
-           print*,' '
-        endif
+                    nbvarut_temp=nbvarut_temp+1                  ! nb of USEFUL variants WITHIN the block of blockvcf variants read
+                    if(numfichvcf.eq.1) numvarori(nbvarut_temp)=nlvcf    ! numero de ligne du nouveau variant utile dans le fichier VCF contenant TOUS les variants UTILES ET INUTILES
 
-        !======================================================================================================================================
+                    if(trim(format_vcf).ne.'GT:DS') then            ! if the format of allelic dosage coding in VCF file is INCORRECT
+                       print*,' '
+                       print*,'PROBLEM : Format in VCF files ',format_vcf,' is not GT:DS as expected'
+                       print*,'Can t read the VCF files'
+                       STOP 37
+                    endif
+                 endif
 
-        if((trim(fmttypgwas).eq.'typ_eval').or.(trim(fmttypgwas).eq.'plink')) then
+              enddo ! end of reading the block of blockvcf lines in the current VCF files : do nlvcf_temp=1,blockvcf
 
-           ! on lit les typages une 1ere fois pour determiner le typage le plus frequent pour remplacer les eventuels typages inconnus par le typage le plus frequent
-           !allocate(freqTG(DosUtLues),nballelesTG(DosUtLues),mostfreqTG(DosUtLues))
-           freqTG=0.0d0
-           nballelesTG=0.0d0
-           nbTGut=0
-           mostfreqTG=1.0d0
+              nlvcf_endblock=nlvcf_temp-1 ! number of lines actually read in the block of blockvcf lines, since the last block can contain less than blockvcf lines
+              !print*,'Tem nlvcf_endblock = ',nlvcf_endblock,'  //  nbvarut_temp = ',nbvarut_temp
 
-           rewind(io_doses)
+              !print*,' ' 
+              !print*,'Apres la lecture du block de ',blockvcf,' lignes dans le fichier VCF ',numfichvcf,' nlvcf_endblock=',nlvcf_endblock,' / nbvarut_temp=',nbvarut_temp,' nlvcf=',nlvcf
+              
+           enddo ! end of loop on the nbfichvcf VCF files
 
-           if(trim(fmttypgwas).eq.'plink') then
-              !allocate(vectemp5(firstVarGWAS)) ! vecteur temporaire qui va recevoir pour la ligne lue du fichier typages VarGWAS plink le phenotype et les genotypes aux variants GWAS des chromosomes precedant NUMCHR_GWAS
-              vectemp5=0
-              read(io_doses,*,iostat=io) ! on lit la 1ere ligne du fichier typages varGWAS de plink = en tetes
-              if (io .ne. 0) exit
-           endif
-
-           do
-              if(trim(fmttypgwas).eq.'typ_eval') then
-                 read(io_doses,informatT,iostat=io) NoNatTemp,TypGwasTemp
-                 if (io .ne. 0) exit
-              endif
-              if(trim(fmttypgwas).eq.'plink') then
-                 read(io_doses,*,iostat=io) NoNatTemp2,NoNatTemp,SIRE_temp,DAM_temp,SEX_temp,vectemp5,TypGwasTemp ! inutile de lire apres la fin du chromosome etudie
-                 if (io .ne. 0) exit
-              endif
+           ! VCF files not needed anymore in STEP_2. Close them
+           !do numfichvcf = 1, nbfichvcf
+           !   close(io_vcf(numfichvcf))
+           !enddo
+           !deallocate(io_vcf)
 
 
-              nldoses=nldoses+1
-              if(DosesUtil(ordinvdoses(nldoses)).ne.0) then ! l individu est dans le fichier PERF donc ses doses sont utiles
-                 indice_temp=DosesUtil(ordinvdoses(nldoses))
-                 !do i=1,nbGWAS
-                 do i=1,DosUtTrav
-                    j = cadre_lec_doses(1,lecture)-1 + i
-                    if (TypGwasTemp(GWASuttoMAP(j)).eq.1) freqTG(j)=freqTG(j)+1d0
-                    if (TypGwasTemp(GWASuttoMAP(j)).eq.2) freqTG(j)=freqTG(j)+2d0
-                    if (TypGwasTemp(GWASuttoMAP(j)).ne.5) nballelesTG(j)=nballelesTG(j)+2d0
-                 enddo
-                 nbTGut=nbTGut+1
-              endif
-           enddo
+           if(nbvarut_temp.gt.0) then ! if there is at least 1 USEFUL new variant 
+              do nlvcf_temp=1,nbvarut_temp 
 
-           if(detailed_log.eq.3) then
-              print*,'Number of lines read in Variant Genotype / allelic dosage file when calculating mostfreqTG : ',nldoses
-           endif
+                 nbvarut=nbvarut+1  
+                 !print*,'Tem nbvarut = ',nbvarut
+                 
 
-           rewind(io_doses)
+                 ! test if we are still in the same batch binary file as with previous useful variant
+                 ! if YES we can write in the already open batch binary file and in the batch summary_info text file
+                 ! if NO we close the previous files and open the new ones before writing in these new files
+                 if((nbvarut).eq.(Bilan_SousGr(6,batch)+1)) then ! number of current useful variant is larger than the last variant of the ongoing batch -> we move to the next batch
+                    close(io_dosesbin0)
+                    close(io_infos1)
+                    batch=batch+1
+                    if(batch.gt.nbSGr) exit   ! last useful variant has already been treated 
+                    write(fx2,'(i0)') Bilan_SousGr(1,batch)
+                    write(fx22,'(i0)') Bilan_SousGr(2,batch)
 
-           !do i=1,nbGWAS
-           do i=1,DosUtTrav
-              j = cadre_lec_doses(1,lecture)-1 + i
-              freqTG(j)=freqTG(j)/nballelesTG(j)
-              if(freqTG(j).lt.(1.0d0/3.0d0))  mostfreqTG(j)=0 ! si freq(allele2) < 0.3333 gzenotype le plus frequent = homozygote 11 
-              if(freqTG(j).gt.(2.0d0/3.0d0))  mostfreqTG(j)=2 ! si freq(allele2) > 0.6666 gzenotype le plus frequent = homozygote 22 
-           enddo
+                    if(indic_cojo.eq.0) then
+                       rep_G_SG=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+                    endif
 
-           if(detailed_log.eq.3) then
-              do i=1,10
-                 j = cadre_lec_doses(1,lecture)-1 + i
-                 print*,'freqTG variant',j,' =',freqTG(j),'  /  mostfreqTG(j) =',mostfreqTG(j)
+                    if(indic_cojo.eq.1) then
+                       write(fxcojo,'(i0)') numvar_cojo
+                       rep_G_SG=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+                    endif
+
+                    chem_bin0=trim(rep_G_SG)//trim("/Doses_GrVar.bin")           ! path and name of new binary file for the batch
+                    chem_infos1=trim(rep_G_SG)//trim("/Infos_GrVar.txt")         ! path and name of new summary text file for the batch
+
+                    open(io_dosesbin0,file=trim(chem_bin0),form="unformatted")
+
+                    open(io_infos1,file=trim(chem_infos1),form="formatted")
+                    write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch),premLignevcf_St3,num_champ_premId_St3,nldoses,nbIdvcf(:),cumul_nbind_prev_vcf(:)
+
+                    write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+
+                 endif
+
+                 write(io_dosesbin0) nbvarut , GWASuttoMAP(nbvarut) , SegmElim(:,nbvarut)
+
+                 if((nbvarut.le.10).or.(nbvarut.gt.(nbGWAS-11))) then
+                    print*,'Avec info SegmElim : ',nbvarut , GWASuttoMAP(nbvarut), SegmElim(:,nbvarut)
+                    print*,'Avec info Bilan_SousGr : ',nbvarut , GWASuttoMAP(nbvarut), Bilan_SousGr(3:4,batch), Bilan_SousGr(1,batch)
+                 endif
+
+                 ! si le variant est le variant COJO alors on ecrit les informations pour ce variant dans un fichier dedie qui sera lu en partie 3
+                 !if((indic_cojo.eq.1).and.(numvarori(nbvarut_temp).eq.numvar_cojo)) then
+                 if((indic_cojo.eq.1).and.(GWASuttoMAP(nbvarut).eq.numvar_cojo)) then
+                    write(io_dosesCojo) nbvarut, GWASuttoMAP(nbvarut), SegmElim(:,nbvarut)
+                    print*,' '
+                    print*,'Informations for Cojo Variant ',numvar_cojo,GWASuttoMAP(nbvarut),' written in file ',trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
+                 endif
+
+                 !endif ! end of test : is the new current variant a new useful variant or not
               enddo
            endif
 
-           if(trim(fmttypgwas).eq.'plink') then
-              read(io_doses,*,iostat=io) ! on lit la 1ere ligne du fichier typages varGWAS de plink = en tetes
-              if (io .ne. 0) exit
-           endif
+           if (fin_lecture) exit
+
+        enddo ! end of loop do while (.not.fin_lecture) : the vcf files have been completely read
+
+        ! VCF files not needed anymore in STEP_2. Close them
+        do numfichvcf = 1, nbfichvcf
+           close(io_vcf(numfichvcf))
+        enddo
+        deallocate(io_vcf)
+
+
+        close(io_dosesbin0)
+        close(io_infos1)
+        close(io_infos0)
+        
+        print*,' '
+        print*,'nlmapgwas=',nlmapgwas, '/ nlvcf=',nlvcf
+                  
+        if (nlvcf.lt.nlmapgwas) then
+           print*,' '
+           print*,'PROBLEM : VCF files contain less variants than MAP file'
+           print*,'CHECK CONSISTENCY BETWEEN VARIANTS IN MAP FILE AND IN VCF FILES'
+           STOP 37
+        endif
+
+        !if(doses_to_geno.eq.1) deallocate(matTempDoses2)
+        
+     endif ! end of test if(trim(fmttypgwas).eq.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+     if(trim(fmttypgwas).ne.'minimac4')then
+
+        write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+        write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+
+        ! DEBUT DE LA BOUCLE SUR LES nb_lectures LECTURES DU FICHIER DOSES_VARGWAS
+
+        do lecture=1,nb_lectures
+
+           DOSES=0.0
 
            nldoses=0
 
-           do
-              if(trim(fmttypgwas).eq.'typ_eval') then
-                 read(io_doses,informatT,iostat=io) NoNatTemp,TypGwasTemp
-                 if (io .ne. 0) exit
-              endif
+           if(lecture.lt.nb_lectures) DosUtTrav=DosUtLues
+           if(lecture.eq.nb_lectures) DosUtTrav= nbGWAS - (DosUtLues*(nb_lectures-1))     ! si on est dans la derniere lecture le nb de VarGWAS utiles lues est le nb de varGWAS restant
+
+           print*,' '
+           print*,'Current number of reading pass of Variant Genotypes / allelic dosages doses_varGWAS = ',lecture,'  DosUtTrav = ',DosUtTrav
+           PRINT*,' '
+
+           ! SI ON TRAVAILLE AVEC LES DOSAGES ALLELIQUES
+           if((trim(fmttypgwas).eq.'minimac3').and.(doses_to_geno.eq.0))  then
+              ! Lire le bloc de variants GWAS par blocs de DosUtTrav variants (on ignore les 2 premiers champs = IdAnim->IdAnim et DOSE)
+              ! premier variant lu au cours de la lecture en cours = cadre_lec_doses(1,lecture)
+              prem_var = cadre_lec_doses(1,lecture) + 2 ! car le premier variant est en position 3 dans fichier dosages
+
+              !print*,'reading pass number ',lecture
+              !print*,'nbind=',nbind
+              !print*,'prem_var=',prem_var
+              !print*,'DosUtTrav=',DosUtTrav
+              !print*,'length_max_line=',length_max_line
+
+              call read_block_buffer_fast_correc(io_doses, nbind, prem_var, DosUtTrav, length_max_line, DOSES, nldoses, nb_var_ut_lus)
+              print*,'Reading pass number ',lecture,' finished / DosUtTrav= ',DosUtTrav,' / ',nldoses,' lines read / ',nb_var_ut_lus,' not te be excluded variants read'
+              print*,' '
+           endif
+
+           ! SI ON TRANSFORME LES DOSAGES ALLELIQUES EN GENOTYPES DISCRETS
+           if((trim(fmttypgwas).eq.'minimac3').and.(doses_to_geno.eq.1))  then ! on veut transformer les dosages en typages discrets 0 1 2
+              ! Lire le bloc de variants GWAS par blocs de DosUtTrav variants (on ignore les 2 premiers champs = IdAnim->IdAnim et DOSE)
+              ! premier variant lu au cours de la lecture en cours = cadre_lec_doses(1,lecture)
+              prem_var = cadre_lec_doses(1,lecture) + 2 ! car le premier variant est en position 3 dans fichier dosages
+              !call read_block_DtG_buffer(io_doses, nbind, prem_var, DosUtTrav, bufsize1, DOSES, nldoses)
+              call read_block_DtG_buffer_fast_correc(io_doses, nbind, prem_var, DosUtTrav, length_max_line, DOSES, nldoses, nb_var_ut_lus)
+              print*,'Reading pass number ',lecture,' finished / DosUtTrav= ',DosUtTrav,' / ',nldoses,' lines read/ ',nb_var_ut_lus,' not to be excluded variants read'
+              print*,' '
+           endif
+
+           print*,' '
+
+
+           !======================================================================================================================================
+
+           if((trim(fmttypgwas).eq.'typ_eval').or.(trim(fmttypgwas).eq.'plink')) then
+
+              ! on lit les typages une 1ere fois pour determiner le typage le plus frequent pour remplacer les eventuels typages inconnus par le typage le plus frequent
+              !allocate(freqTG(DosUtLues),nballelesTG(DosUtLues),mostfreqTG(DosUtLues))
+              freqTG=0.0d0
+              nballelesTG=0.0d0
+              nbTGut=0
+              mostfreqTG=1.0d0
+
+              rewind(io_doses)
+
               if(trim(fmttypgwas).eq.'plink') then
-                 read(io_doses,*,iostat=io) NoNatTemp2,NoNatTemp,SIRE_temp,DAM_temp,SEX_temp,vectemp5,TypGwasTemp ! inutile de lire apres la fin du chromosome etudie
+                 !allocate(vectemp5(firstVarGWAS)) ! vecteur temporaire qui va recevoir pour la ligne lue du fichier typages VarGWAS plink le phenotype et les genotypes aux variants GWAS des chromosomes precedant NUMCHR_GWAS
+                 vectemp5=0
+                 read(io_doses,*,iostat=io) ! on lit la 1ere ligne du fichier typages varGWAS de plink = en tetes
                  if (io .ne. 0) exit
               endif
 
-              nldoses=nldoses+1
-              if(DosesUtil(ordinvdoses(nldoses)).ne.0) then ! l individu est dans le fichier PERF donc ses doses sont utiles
-                 indice_temp=DosesUtil(ordinvdoses(nldoses))
-                 !do i=1,nbGWAS
-                 do i=1,DosUtTrav
+              do
+                 if(trim(fmttypgwas).eq.'typ_eval') then
+                    read(io_doses,informatT,iostat=io) NoNatTemp,TypGwasTemp
+                    if (io .ne. 0) exit
+                 endif
+                 if(trim(fmttypgwas).eq.'plink') then
+                    read(io_doses,*,iostat=io) NoNatTemp2,NoNatTemp,SIRE_temp,DAM_temp,SEX_temp,vectemp5,TypGwasTemp ! inutile de lire apres la fin du chromosome etudie
+                    if (io .ne. 0) exit
+                 endif
+
+
+                 nldoses=nldoses+1
+                 if(DosesUtil(ordinvdoses(nldoses)).ne.0) then ! l individu est dans le fichier PERF donc ses doses sont utiles
+                    indice_temp=DosesUtil(ordinvdoses(nldoses))
+                    !do i=1,nbGWAS
+                    do i=1,DosUtTrav
+                       j = cadre_lec_doses(1,lecture)-1 + i
+                       if (TypGwasTemp(GWASuttoMAP(j)).eq.1) freqTG(j)=freqTG(j)+1d0
+                       if (TypGwasTemp(GWASuttoMAP(j)).eq.2) freqTG(j)=freqTG(j)+2d0
+                       if (TypGwasTemp(GWASuttoMAP(j)).ne.5) nballelesTG(j)=nballelesTG(j)+2d0
+                    enddo
+                    nbTGut=nbTGut+1
+                 endif
+              enddo
+
+              if(detailed_log.eq.3) then
+                 print*,'Number of lines read in Variant Genotype / allelic dosage file when calculating mostfreqTG : ',nldoses
+              endif
+
+              rewind(io_doses)
+
+              !do i=1,nbGWAS
+              do i=1,DosUtTrav
+                 j = cadre_lec_doses(1,lecture)-1 + i
+                 freqTG(j)=freqTG(j)/nballelesTG(j)
+                 if(freqTG(j).lt.(1.0d0/3.0d0))  mostfreqTG(j)=0 ! si freq(allele2) < 0.3333 gzenotype le plus frequent = homozygote 11 
+                 if(freqTG(j).gt.(2.0d0/3.0d0))  mostfreqTG(j)=2 ! si freq(allele2) > 0.6666 gzenotype le plus frequent = homozygote 22 
+              enddo
+
+              if(detailed_log.eq.3) then
+                 do i=1,10
                     j = cadre_lec_doses(1,lecture)-1 + i
-                    if(TypGwasTemp(GWASuttoMAP(j)).eq.5) TypGwasTemp(GWASuttoMAP(j))=mostfreqTG(GWASuttoMAP(j))
-                    !DOSES(indice_temp,i)= dfloat(TypGwasTemp(GWASuttoMAP(j)))  ! correction du 28/07/2023 car DOSES est REAL(kind=4) --> float au lieu de dfloat
-                    DOSES(indice_temp,i)= float(TypGwasTemp(GWASuttoMAP(j)))
+                    print*,'freqTG variant',j,' =',freqTG(j),'  /  mostfreqTG(j) =',mostfreqTG(j)
                  enddo
               endif
-           enddo
 
-           if(detailed_log.ge.1) then
-              print*,' '
-              print*,'Number of lines read in Variant Genotype / allelic dosage file : ',nldoses
-              print*,' '
-           endif
-
-        endif
-
-        if(detailed_log.eq.3) then
-           print*,' '
-           print*,'Allelic dosages or Genotypes for the first 100 GWAS Variants and the first 10 sorted individuals :'
-           do i=1,min(10,nbind)
-              print*,DOSES(i,1:min(100,DosUtLues))
-           enddo
-        endif
-
-        !======================================================================================================================================
-
-        rewind(io_doses)
-
-        if(nldoses.ne.nltyppar) then
-           print*,'For information : numbers of line read in Variant Genotype / allelic dosage file ',nldoses,' and in Marker Genotype file ',nltyppar,' are different'
-           !STOP 30
-        endif
-
-        !print*,'Table DOSES :'
-        !do i=1,nldoses
-        !   print*,'indiv ',i,' DOSES = ',DOSES(i,:)
-        !enddo
-
-        !close(io_doses)
-
-
-
-        !==========================================================================================================
-        !==========================================================================================================
-        !==========================================================================================================
-
-        !if(indic_cojo.eq.1) then
-        !   write(fxcojo,'(i0)') numvar_cojo
-        !   chem_dosesCojo=trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
-        !   open(io_dosesCojo,file=trim(chem_dosesCojo),form="unformatted")   ! si COJO on ouvre le fichier qui va recevoir les doses du variant cojo
-        !endif
-
-        do j=1,DosUtTrav
-           i=cadre_lec_doses(1,lecture)-1 + j
-
-           if((i).eq.(Bilan_SousGr(6,batch)+1)) then ! on est passe au sous groupe suivant
-              close(io_dosesbin0)
-              close(io_infos1)
-
-              batch=batch+1
-              if(batch.gt.nbSGr) exit
-              write(fx2,'(i0)') Bilan_SousGr(1,batch)
-              write(fx22,'(i0)') Bilan_SousGr(2,batch)
-
-              if(indic_cojo.eq.0) then
-                 rep_G_SG=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+              if(trim(fmttypgwas).eq.'plink') then
+                 read(io_doses,*,iostat=io) ! on lit la 1ere ligne du fichier typages varGWAS de plink = en tetes
+                 if (io .ne. 0) exit
               endif
 
-              if(indic_cojo.eq.1) then
-                 write(fxcojo,'(i0)') numvar_cojo
-                 rep_G_SG=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
-                 !chem_dosesCojo=trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
-                 !open(io_dosesCojo,file=trim(chem_dosesCojo),form="unformatted")   ! si COJO on ouvre le fichier qui va recevoir les doses du variant cojo
+              nldoses=0
+
+              do
+                 if(trim(fmttypgwas).eq.'typ_eval') then
+                    read(io_doses,informatT,iostat=io) NoNatTemp,TypGwasTemp
+                    if (io .ne. 0) exit
+                 endif
+                 if(trim(fmttypgwas).eq.'plink') then
+                    read(io_doses,*,iostat=io) NoNatTemp2,NoNatTemp,SIRE_temp,DAM_temp,SEX_temp,vectemp5,TypGwasTemp ! inutile de lire apres la fin du chromosome etudie
+                    if (io .ne. 0) exit
+                 endif
+
+                 nldoses=nldoses+1
+                 if(DosesUtil(ordinvdoses(nldoses)).ne.0) then ! l individu est dans le fichier PERF donc ses doses sont utiles
+                    indice_temp=DosesUtil(ordinvdoses(nldoses))
+                    !do i=1,nbGWAS
+                    do i=1,DosUtTrav
+                       j = cadre_lec_doses(1,lecture)-1 + i
+                       if(TypGwasTemp(GWASuttoMAP(j)).eq.5) TypGwasTemp(GWASuttoMAP(j))=mostfreqTG(GWASuttoMAP(j))
+                       !DOSES(indice_temp,i)= dfloat(TypGwasTemp(GWASuttoMAP(j)))  ! correction du 28/07/2023 car DOSES est REAL(kind=4) --> float au lieu de dfloat
+                       DOSES(indice_temp,i)= float(TypGwasTemp(GWASuttoMAP(j)))
+                    enddo
+                 endif
+              enddo
+
+              if(detailed_log.ge.1) then
+                 print*,' '
+                 print*,'Number of lines read in Variant Genotype / allelic dosage file : ',nldoses
+                 print*,' '
               endif
 
-              chem_bin0=trim(rep_G_SG)//trim("/Doses_GrVar.bin")
-              chem_infos1=trim(rep_G_SG)//trim("/Infos_GrVar.txt")
-
-              open(io_dosesbin0,file=trim(chem_bin0),form="unformatted")
-
-              open(io_infos1,file=trim(chem_infos1),form="formatted")
-              write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
-              write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
-
            endif
 
-!!!!!!!!!!!!!!!!!!!!!!!!!  SELON VALEUR DE GWAS_TYPE ECRIRE DOSES OU COVAR_M
-           if((gwastype.eq.'add').or.(gwastype.eq.'add_dom'))  write(io_dosesbin0) i ,GWASuttoMAP(i) ,SegmElim(:,i) , DOSES(:,j)
-
-           ! si le variant est le variant COJO alors on ecrit les doses pour ce variant dans un fichier dedie qui sera lu en partie 3
-           if((indic_cojo.eq.1).and.(GWASuttoMAP(i).eq.numvar_cojo)) then
-!!!!!!!!!!!!!!!!!!!!!!!!  SELON VALEUR DE GWAS_TYPE ECRIRE DOSES OU COVAR_M
-              if((gwastype.eq.'add').or.(gwastype.eq.'add_dom')) write(io_dosesCojo) i,GWASuttoMAP(i),SegmElim(:,i), DOSES(:,j)
+           if(detailed_log.eq.3) then
               print*,' '
-              print*,'Genotypes / Allelic Dosages for Cojo Variant ',numvar_cojo,GWASuttoMAP(i),' written in file ',trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
-
+              print*,'Allelic dosages or Genotypes for the first 100 GWAS Variants and the first 10 sorted individuals :'
+              do i=1,min(10,nbind)
+                 print*,DOSES(i,1:min(100,DosUtLues))
+              enddo
            endif
 
-        enddo
+           !======================================================================================================================================
 
-        rewind(io_doses) ! on se replace au debut du fichier typages GWAS pour la lecture suivante
+           rewind(io_doses)
 
-        !if(trim(fmttypgwas).eq.'plink') deallocate(vectemp5)
+           if(nldoses.ne.nltyppar) then
+              print*,'For information : numbers of line read in Variant Genotype / allelic dosage file ',nldoses,' and in Marker Genotype file ',nltyppar,' are different'
+              !STOP 30
+           endif
 
-     enddo ! fin de la boucle sur les nb_lectures lectures du fichier doses_varGWAS
+           !print*,'Table DOSES :'
+           !do i=1,nldoses
+           !   print*,'indiv ',i,' DOSES = ',DOSES(i,:)
+           !enddo
 
-     close(io_dosesbin0)
-     close(io_infos1)
-     close(io_infos0)
-     close(io_doses)
+           !close(io_doses)
 
-     if(indic_cojo.eq.1) close(io_dosesCojo)
 
-     ! la table DOSES(,) est desormais inutile --> on la desalloue
-     deallocate(DOSES)                                                 
+
+           !==========================================================================================================
+           !==========================================================================================================
+           !==========================================================================================================
+
+           !if(indic_cojo.eq.1) then
+           !   write(fxcojo,'(i0)') numvar_cojo
+           !   chem_dosesCojo=trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
+           !   open(io_dosesCojo,file=trim(chem_dosesCojo),form="unformatted")   ! si COJO on ouvre le fichier qui va recevoir les doses du variant cojo
+           !endif
+
+           do j=1,DosUtTrav
+              i=cadre_lec_doses(1,lecture)-1 + j
+
+              if((i).eq.(Bilan_SousGr(6,batch)+1)) then ! on est passe au sous groupe suivant
+                 close(io_dosesbin0)
+                 close(io_infos1)
+
+                 batch=batch+1
+                 if(batch.gt.nbSGr) exit
+                 write(fx2,'(i0)') Bilan_SousGr(1,batch)
+                 write(fx22,'(i0)') Bilan_SousGr(2,batch)
+
+                 if(indic_cojo.eq.0) then
+                    rep_G_SG=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+                 endif
+
+                 if(indic_cojo.eq.1) then
+                    write(fxcojo,'(i0)') numvar_cojo
+                    rep_G_SG=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+                    !chem_dosesCojo=trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
+                    !open(io_dosesCojo,file=trim(chem_dosesCojo),form="unformatted")   ! si COJO on ouvre le fichier qui va recevoir les doses du variant cojo
+                 endif
+
+                 chem_bin0=trim(rep_G_SG)//trim("/Doses_GrVar.bin")
+                 chem_infos1=trim(rep_G_SG)//trim("/Infos_GrVar.txt")
+
+                 open(io_dosesbin0,file=trim(chem_bin0),form="unformatted")
+
+                 open(io_infos1,file=trim(chem_infos1),form="formatted")
+                 write(io_infos1,*) Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+                 write(io_infos0,*) chrom_anal,Bilan_SousGr(1:4,batch),Bilan_SousGr(7,batch)
+
+              endif
+
+              !if((gwastype.eq.'add').or.(gwastype.eq.'add_dom'))  write(io_dosesbin0) i ,GWASuttoMAP(i) ,SegmElim(:,i) , DOSES(:,j)
+              write(io_dosesbin0) i ,GWASuttoMAP(i) ,SegmElim(:,i) , DOSES(:,j)
+
+              ! si le variant est le variant COJO alors on ecrit les doses pour ce variant dans un fichier dedie qui sera lu en partie 3
+              if((indic_cojo.eq.1).and.(GWASuttoMAP(i).eq.numvar_cojo)) then
+                 !if((gwastype.eq.'add').or.(gwastype.eq.'add_dom')) write(io_dosesCojo) i,GWASuttoMAP(i),SegmElim(:,i), DOSES(:,j)
+                 write(io_dosesCojo) i,GWASuttoMAP(i),SegmElim(:,i), DOSES(:,j)
+                 print*,' '
+                 print*,'Genotypes / Allelic Dosages for Cojo Variant ',numvar_cojo,GWASuttoMAP(i),' written in file ',trim("cojo_")//trim(fxcojo)//trim("/Doses_VarCojo_")//trim(fxcojo)//trim(".bin")
+
+              endif
+
+           enddo
+
+           rewind(io_doses) ! on se replace au debut du fichier typages GWAS pour la lecture suivante
+
+           !if(trim(fmttypgwas).eq.'plink') deallocate(vectemp5)
+
+        enddo ! fin de la boucle sur les nb_lectures lectures du fichier doses_varGWAS
+
+        close(io_dosesbin0)
+        close(io_infos1)
+        close(io_infos0)
+        close(io_doses)
+
+        if(indic_cojo.eq.1) close(io_dosesCojo)
+
+        ! la table DOSES(,) est desormais inutile --> on la desalloue
+        deallocate(DOSES)                  
+
+     endif ! end of test if(fmttypgwas.ne.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
      !====================================================================================================================
@@ -3436,10 +3819,12 @@ program SNP_GWAS_publi
      if(indic_cojo.eq.1) call system(trim("chmod u+x lance_part3_allGR_chr")//trim(fx1)//trim("cojo_")//trim(fxcojo)//trim(".sh"))
 
 
-
+     call fdate(jour)
+     print*,jour
 
      print*,'STEP_2 completed'
   endif ! fin du test if steptodo = 2 
+
 
 
   !==========================================================================================================
@@ -3448,7 +3833,25 @@ program SNP_GWAS_publi
 
   if(steptodo.eq.3) then
 
+     call fdate(jour)
+     print*,jour
+     print*,'STEP_3 specific section starting'
+
+
      iobilan=0
+
+
+     if(trim(fmttypgwas).eq.'minimac4') then
+        ! opening all the VCF files
+        allocate(io_vcf(nbfichvcf))
+        io_vcf=0
+        do numfichvcf = 1, nbfichvcf  
+           io_vcf(numfichvcf) = 80 + numfichvcf
+           write(fxvcf,'(i0)') numfichvcf
+           open(io_vcf(numfichvcf), file=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf', status='old')
+        enddo
+     endif
+
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!
      ! preparation des formats pour ecrire dans les fichiers resultats pour les differents modeles
@@ -3481,30 +3884,277 @@ program SNP_GWAS_publi
 
      print*,'STEP_3 STARTS'
 
+
+!!!!!!!!!!!!!!!!!!!!!
+
+     ! on lit le fichier contenant les informations pour le Groupe de VarGWAS consideres qui seront utiles pour l execution de la partie 3
+
+     write(fx1,'(i0)') chrom_p3
+     write(fx2,'(i0)') numgr_p3
+     write(fx22,'(i0)') numSgr_p3
+     if(indic_cojo.eq.1) write(fxcojo,'(i0)') numvar_cojo
+
+     if(indic_cojo.eq.0)  open(io_dosesbin0,file=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt"),form="formatted")
+     if(indic_cojo.eq.1)  open(io_dosesbin0,file=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt"),form="formatted")
+
+     if(indic_cojo.eq.0) print*,'Information about Group x Batch in file ',trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt")
+     if(indic_cojo.eq.1) print*,'Information about Group x Batch in file ',trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt")
+
+     if(trim(fmttypgwas).ne.'minimac4') then
+        do
+           read(io_dosesbin0,*,iostat=iobilan) NumGr,NumSGr,Felim,Lelim,nbGWASgr
+           if (iobilan .ne. 0) exit
+           print*,' '
+           print*,'Group =',NumGr,' / Batch =',NumSGr,' /  1st Marker excluded =',Felim,' /  last Marker excluded =',Lelim, ' /  number of Variants in the Batch =',nbGWASgr
+           print*,' '
+        enddo
+     endif
+     if(trim(fmttypgwas).eq.'minimac4') then
+        allocate(nbIdvcf(nbfichvcf),cumul_nbind_prev_vcf(nbfichvcf))
+        nbIdvcf=0
+        cumul_nbind_prev_vcf=0
+        do
+           read(io_dosesbin0,*,iostat=iobilan) NumGr,NumSGr,Felim,Lelim,nbGWASgr,premLignevcf_St3,num_champ_premId_St3,nldoses,nbIdvcf(:),cumul_nbind_prev_vcf(:)
+           if (iobilan .ne. 0) exit
+           print*,' '
+           print*,'Group =',NumGr,' / Batch =',NumSGr,' /  1st Marker excluded =',Felim,' /  last Marker excluded =',Lelim, ' /  number of Variants in the Batch =',nbGWASgr
+           print*,'premLignevcf_St3=',premLignevcf_St3,'  /  num_champ_premId_St3=',num_champ_premId_St3,'  /  nldoses=',nldoses
+           print*,'nbIdvcf(:)=',nbIdvcf(:)
+           print*,'cumul_nbind_prev_vcf(:)=',cumul_nbind_prev_vcf(:)
+           print*,' '
+        enddo
+     endif
+
+     close(io_dosesbin0)
+
+     if(numgr_p3.ne.NumGR) then
+        print*,'PROBLEM : Group Id read in parameter file for Step_3 is different from Group Id read in file Infos_GrVar.txt'
+        STOP 21
+     endif
+     if(numSgr_p3.ne.NumSGr) then
+        print*,'PROBLEM : Batch Id read in parameter file for Step_3 is different from Batch Id read in file Infos_GrVar.txt'
+        STOP 21
+     endif
+
+
+!!!!!!!!!!!!!!!!!!!!!!!
+
+     ! on cree le nom du repertoire contenant les fichiers du sous groupe
+     write(fx1,'(i0)') chrom_p3
+     write(fx2,'(i0)') numgr_p3
+     write(fx22,'(i0)') numSgr_p3
+     if(indic_cojo.eq.0) then
+        rep_G_SG=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+     endif
+     if(indic_cojo.eq.1) then
+        write(fxcojo,'(i0)') numvar_cojo
+        rep_G_SG=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)
+     endif
+
+
+     ! si minimac4 : on lit les vecteurs ordinvdoses et DosesUtil dont on a besoin pour utiliser les fichiers VCF
+     if(trim(fmttypgwas).eq.'minimac4') then
+        !chem_nldoses=trim(rep_G_SG)//trim("/nbind_tot_fichVCF.txt")    
+
+        open(io_nldoses,file="nbind_tot_fichVCF.txt",status='old')
+        do
+           read(io_nldoses,*,iostat=ionldoses) nldoses ! This file contains 1 single line
+           if (ionldoses .ne. 0) exit
+        enddo
+        print*,' '
+        print*,'valeur de nldoses = nb total indiv dans l ensemble des fichiers VCF a lire = nldoses = ',nldoses
+        print*,' '
+        close(io_nldoses)
+
+        ! on lit les vecteurs ordinvdoses et DosesUtil dont on a besoi pour utiliser les fichiers VCF
+        allocate(ordinvdoses(nldoses),DosesUtil(nldoses))
+
+        ! files are in the root directory
+        open(io_DosesUtil0,file=trim("vec_DosesUtil_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+        open(io_ordinvdoses0,file=trim("vec_ordinvdoses_all_Gr_SG_chr")//trim(fx1)//trim(".txt"),form="formatted")
+
+        i=0
+        do
+           read(io_DosesUtil0,*,iostat=ionldoses) dosesutil_temp
+           if (ionldoses .ne. 0) exit
+           i=i+1
+           DosesUtil(i) = dosesutil_temp
+        enddo
+        if(i.ne.nldoses) then
+           print*,'Problem: file vec_DosesUtil_all_Gr_SG_chrXX.txt contains ',i,'values whereas ',nldoses,' values expected'
+           STOP 55
+        endif
+
+        i=0
+        do
+           read(io_ordinvdoses0,*,iostat=ionldoses) ordinvdoses_temp
+           if (ionldoses .ne. 0) exit
+           i=i+1
+           ordinvdoses(i)=ordinvdoses_temp
+        enddo
+        if(i.ne.nldoses) then
+           print*,'Problem: file vec_DosesUtil_all_Gr_SG_chrXX.txt contains ',i,'values whereas ',nldoses,' values expected'
+           STOP 55
+        endif
+        
+        print*,' '
+        print*,'Fichiers vec_DosesUtil_all_Gr_SG_chrXX.txt et vec_ordinvdoses_all_Gr_SG_chrXX.txt lus'
+        print*,'Premiers elements du vecteur DosesUtil : ',DOsesUtil(1:10)
+        print*,'Premiers elements du vecteur ordinvdoses : ',ordinvdoses(1:10)
+        print*,' '
+
+        close(io_DosesUtil0)
+        close(io_ordinvdoses0)
+
+     endif  ! fin de la section minimac4
+
+
      ! si COJO alors on commence par lire le fichier doses du variant COJO pour connaitre l identite du variant et connaitre le nom du repertoire contenant les fichiers a lire
      if(indic_cojo.eq.1) then
         if(gwastype.eq.'add') then
-           allocate(vecDosesSD_cojo(nbind,1))
-           vecDosesSD_cojo=0.0
+           if(trim(fmttypgwas).ne.'minimac4') allocate(vecDosesSD_cojo(nbind,1))
+           allocate(vecDoses_cojo(nbind,1))
+           !vecDosesSD_cojo=0.0  ! modif 27/05/2026
         endif
         if(gwastype.eq.'add_dom') then
-           allocate(vecDosesSD_cojo(nbind,2))
-           vecDosesSD_cojo=0.0
+           if(trim(fmttypgwas).ne.'minimac4') allocate(vecDosesSD_cojo(nbind,2))
+           allocate(vecDoses_cojo(nbind,2))
+           !vecDosesSD_cojo=0.0  ! modif 27/05/2026
         endif
 
         if(detailed_log.eq.3) print*,'Allocations COJO passees'
 
-        print*,'cojofile=',trim(cojofile)
 
-        open(io_dosesCojo,file=trim(cojofile),form="unformatted")
+        ! NB : dans STEP3, cojofile = chemin et nom du fichier lu dans fich_param_STEP_3 contenant les informations pour le variant COJO  
+        !      = dosages alleliques / genotypes pour variant COJO si autre format que minimac4
+        !      = numero du variant et SNPparente a exclure si minimac4
 
-        if((GWAStype.eq.'add').or.(GWAStype.eq.'add_dom')) read(io_dosesCojo) j,numvar_cojo,temp3(1:3),vecDosesSD_cojo(1:nbind,1)
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        ! cas des anciens formats de fichiers dosages/typages variants SNP
+        if(trim(fmttypgwas).ne.'minimac4') then
 
-        if(GWAStype.eq.'add_dom') vecDosesSD_cojo(1:nbind,2) = (ABS((ABS(vecDosesSD_cojo(1:nbind,1)-1.0d0))-1.0d0))
+           print*,'fichier contenant les doses du variants COJO= ',trim(chem_dosesCojo)
 
-        if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+           open(io_dosesCojo,file=trim(cojofile),form="unformatted")
 
-        close(io_dosesCojo)
+           !if((GWAStype.eq.'add').or.(GWAStype.eq.'add_dom')) read(io_dosesCojo) j,numvar_cojo,temp3(1:3),vecDosesSD_cojo(1:nbind,1)
+           read(io_dosesCojo) j,numvar_cojo,temp3(1:3),vecDosesSD_cojo(1:nbind,1)
+
+           if(GWAStype.eq.'add_dom') vecDosesSD_cojo(1:nbind,2) = (ABS((ABS(vecDosesSD_cojo(1:nbind,1)-1.0d0))-1.0d0))
+
+           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+
+           vecDoses_cojo=vecDosesSD_cojo*1.0d0
+
+           close(io_dosesCojo)
+
+        endif  ! fin du test if(fmttypgwas.ne.'minimac4')
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        if(trim(fmttypgwas).eq.'minimac4') then
+
+           print*,'fichier contenant les doses du variants COJO= ',trim(chem_dosesCojo)
+
+           open(io_dosesCojo,file=trim(cojofile),form="unformatted")
+
+           read(io_dosesCojo) j,numvar_cojo,temp3(1:3)
+
+           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+
+           close(io_dosesCojo)
+
+           nlvcf=0
+           nlvcf_prec=0
+           fin_lecture=.false.
+           
+           ! LECTURE DES DOSAGES POUR VARIANT COJO DANS FICHIERS VCF et remplissage de vecDoses_cojo(1:nbind,1 ou 2)
+
+           k_temp = 0 ! nb individuals cumulated over all the VCF files
+
+           do numfichvcf = 1, nbfichvcf  ! on va lire successivement dans tous les fichiers VCF
+
+              nlvcf=nlvcf_prec ! on reinitialise le numero de ligne des fichiers VCF auquel on s est arrete precedement 
+
+              ! on commence par sauter toutes les lignes inutiles PRECEDANT le prochain variant GWAS utile du sous-groupe = lignes d en-tete du VCF
+              ! et/ou variants des autres sous-groupes et/ou variants inutiles sur la plage du sous-groupe
+              do while ( (nlvcf.lt.(premLignevcf_St3+numvar_cojo-1)).and.(.not.fin_lecture) )
+
+                 read(io_vcf(numfichvcf),*, iostat=io) temp_vcf ! temp_vcf=chaine de caracteres qui sert juste a aller une ligne plus loin
+                 if (io /= 0) then
+                    fin_lecture=.true.
+                    exit
+                 endif
+                 
+                 nlvcf = nlvcf + 1  ! new ligne in all the vcf files
+ 
+              enddo     ! a ce point on est place dans le fichier VCF numfichvcf a la ligne qui precede la ligne du variant utile qu on veut traiterCOJO pour lequel on cherche les dosages
+
+              !------------------------
+              ! Lecture de la ligne du variant COJO recherche dans le fichier vcf
+              !------------------------
+              read(io_vcf(numfichvcf),*, iostat=io) numchr_vcf,pos_vcf,vecCharTemp1,format_vcf,vecCharTemp2(1:nbIdVcf(numfichvcf))
+              if (io /= 0) then
+                 fin_lecture=.true.
+                 exit
+              endif
+
+              nlvcf=nlvcf+1 ! new ligne in all the vcf files = line of variant of interest
+
+              k_temp = cumul_nbind_prev_vcf(numfichvcf)
+
+              do j=1,nbIdVcf(numfichvcf)                   ! j = nuber of animal in the CURRENT VCF file
+
+                 k_temp = k_temp + 1                                 ! k = total number of animals already read SO FAR in the PREVIOUS VCF files AND in the CURRENT VCF file
+
+                 if(DosesUtil(ordinvdoses(k_temp)).ne.0) then   ! l individu est dans le fichier PERF donc ses doses sont utiles
+                    indice_temp=DosesUtil(ordinvdoses(k_temp)) 
+                    if(indice_temp.gt.nbind) then
+                       print*,' '
+                       print*,'PROBLEM : indice_temp > nbind number of useful animals'
+                       STOP 47
+                    endif
+                    pos = index(vecCharTemp2(j), ':')
+                    if (pos > 0) then
+                       ! Lecture interne de la partie numérique
+                       read(vecCharTemp2(j)(pos+1:), *) vecDoses_cojo(indice_temp,1)
+                    else
+                       ! Problem with format of dosage in VCF file
+                       print*,' '
+                       print*,'PROBLEM : format of allelic dosage in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                       STOP 46
+                    end if
+                 endif ! end of test is animal useful
+              enddo
+              
+              rewind(io_vcf(numfichvcf))  ! on se replace au debut du fichier vcf pour la suite du programme pour lire les variants GWAS
+
+           enddo   ! on a avance dans tous les fichiers VCF
+
+           ! if User wants to convert allelic dosages into dicrete genotypes
+           if(doses_to_geno.eq.1) then
+              allocate(matTempDoses2(nbind))
+              ! Transformation dosage → génotype vectorisée
+              matTempDoses2(1:nbind) = 0.0     ! initialisation à 0.0
+              matTempDoses2(vecDoses_cojo(1:nbind,1) > 0.5 .and. vecDoses_cojo(1:nbind,1) < 1.5) = 1.0
+              matTempDoses2(vecDoses_cojo(1:nbind,1) >= 1.5) = 2.0
+              vecDoses_cojo(1:nbind,1)=matTempDoses2(1:nbind)
+              deallocate(matTempDoses2)
+           endif
+
+           if(GWAStype.eq.'add_dom') vecDoses_cojo(1:nbind,2) = (ABS((ABS(vecDoses_cojo(1:nbind,1)-1.0))-1.0))
+
+           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+
+        endif ! fin du test if(fmttypgwas.eq.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
 
         if(gwastype.eq.'add') then
            neff_cojo=1
@@ -3520,46 +4170,17 @@ program SNP_GWAS_publi
         matWeight_cov_cojo=0.0d0
         if (gwastype.eq.'add') then
            matNivAnim_cojo(1,1,:)=1
-           matWeight_cov_cojo(1,:)=vecDosesSD_cojo(:,1)*(sqrt(matPOIDS(:,1)))
+           matWeight_cov_cojo(1,:)=vecDoses_cojo(:,1)*(sqrt_matPOIDS(:,1))
         endif
         if (gwastype.eq.'add_dom') then
            matNivAnim_cojo(1,1,:)=1  ! effet additif
-           matWeight_cov_cojo(1,:)=vecDosesSD_cojo(:,1)*(sqrt(matPOIDS(:,1)))  ! effet additif
+           matWeight_cov_cojo(1,:)=vecDoses_cojo(:,1)*(sqrt_matPOIDS(:,1))  ! effet additif
            matNivAnim_cojo(2,1,:)=1  ! effet de dominance
-           matWeight_cov_cojo(2,:)=vecDosesSD_cojo(:,2)*(sqrt(matPOIDS(:,1)))  ! effet de dominance
+           matWeight_cov_cojo(2,:)=vecDoses_cojo(:,2)*(sqrt_matPOIDS(:,1))  ! effet de dominance
         endif
 
      endif  ! fin du test if indic_cojo=1
 
-
-     ! on lit le fichier contenant les informations pour le Groupe de VarGWAS consideres qui seront utiles pour l execution de la partie 3
-
-     write(fx1,'(i0)') chrom_p3
-     write(fx2,'(i0)') numgr_p3
-     write(fx22,'(i0)') numSgr_p3
-     if(indic_cojo.eq.1) write(fxcojo,'(i0)') numvar_cojo
-
-     if(indic_cojo.eq.0)  open(io_dosesbin0,file=trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt"),form="formatted")
-     if(indic_cojo.eq.1)  open(io_dosesbin0,file=trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt"),form="formatted")
-
-     if(indic_cojo.eq.0) print*,'Information about Group x Batch in file ',trim("chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt")
-     if(indic_cojo.eq.1) print*,'Information about Group x Batch in file ',trim("cojo_")//trim(fxcojo)//trim("/chr")//trim(fx1)//trim("_gr")//trim(fx2)//trim("/SG")//trim(fx22)//trim("/Infos_GrVar.txt")
-
-     do
-        read(io_dosesbin0,*,iostat=iobilan) NumGr,NumSGr,Felim,Lelim,nbGWASgr
-        if (iobilan .ne. 0) exit
-        print*,'Group =',NumGr,' / Batch =',NumSGr,' /  1st Marker excluded =',Felim,' /  last Marker excluded =',Lelim, ' /  number of Variants in the Batch =',nbGWASgr
-     enddo
-     close(io_dosesbin0)
-
-     if(numgr_p3.ne.NumGR) then
-        print*,'PROBLEM : Group Id read in parameter file for Step_3 is different from Group Id read in file Infos_GrVar.txt'
-        STOP 21
-     endif
-     if(numSgr_p3.ne.NumSGr) then
-        print*,'PROBLEM : Batch Id read in parameter file for Step_3 is different from Batch Id read in file Infos_GrVar.txt'
-        STOP 21
-     endif
 
 
      allocate(numVarGWASori(nbGWASgr),GWASuttoMAP_p3(nbGWASgr),SegmElim_p3(3,nbGWASgr))
@@ -3570,7 +4191,7 @@ program SNP_GWAS_publi
      ! on relit le fichier invLEFT_binfile pour re-remplir inf_LEFT_EP et executer la suite du programme
 
      allocate (inf_LEFT_EP(dimvec))
-     inf_LEFT_EP=0.0d0
+     !inf_LEFT_EP=0.0d0    ! modif 27/05/2026
 
      if(detailed_log.eq.3) then
         call fdate(jour)
@@ -3591,7 +4212,7 @@ program SNP_GWAS_publi
      ! on relit le fichier RIGHT_binfile sur disque pour re-remplir RIGHT_EP et executer la suite du programme
 
      allocate(RIGHT_EP(neq_ep))
-     RIGHT_EP=0.0d0
+     !RIGHT_EP=0.0d0    ! modif 27/05/2026
 
      if(detailed_log.eq.3) then
         print*,' '
@@ -3639,7 +4260,7 @@ program SNP_GWAS_publi
      ! BetaS est solution du systeme LEFT_EP_complet*BetaS = RIGHT_EP_complet
      ! ATTENTION : la subroutine dsymm a besoin d une matrice symetrique stockee sous forme triangulaire meme si cela utilise de la memoire pour rien
      allocate(inf_LEFT_EP_act(neq_ep,neq_ep))
-     inf_LEFT_EP_act=0.0d0
+     !inf_LEFT_EP_act=0.0d0    ! modif 27/05/2026
      do j=1,neq_ep
         inf_LEFT_EP_act(j:neq_ep,j) = inf_LEFT_EP(TI(j,j,neq_ep):TI(neq_ep,j,neq_ep))
      enddo
@@ -3720,16 +4341,17 @@ program SNP_GWAS_publi
      !allocate(inf_LEFT_EP_act(neq_ep,neq_ep))
      allocate(RIGHT_EP_act(neq_ep+neq_cojo,1))
      !allocate(XpZMpZ(neq_ep,neff_GWAS_lu))
-     allocate(ZpXZpM(neff_GWAS_lu,neq_ep+neq_cojo))
+     allocate(ZpXZpM(neq_ep+neq_cojo,neff_GWAS_lu))
      allocate(vecDosesPond(nbind,neff_GWAS_lu))
      allocate(vecDoses(nbind,neff_GWAS_lu))
-     allocate(vecDosesSD(nbind))
-     allocate(vecGENO1(nbind))
+     if(trim(fmttypgwas).ne.'minimac4')  allocate(vecDosesSD(nbind))
+     if(CentrGenoPar_st3.eq.0) allocate(vecGENO1(nbind))
      allocate(ZpY(neff_GWAS_lu,1)) ! pour la construction de Z'Y pour le variant GWAS considere
      allocate(ZpZ(neff_GWAS_lu,neff_GWAS_lu)) ! pour la construction de Z'Z pour le variant GWAS considere
-     allocate(interm_1(neff_GWAS_lu,neq_ep+neq_cojo)) ! = t[X'Z M'Z] LEFT_EP_act
-     allocate(interm_2(neff_GWAS_lu,neff_GWAS_lu)) ! = interm_1 [X'Z M'Z]
-     allocate(interm_3(neff_GWAS_lu,1)) ! = interm_1 [X'y M'y]
+     !allocate(interm_1(neff_GWAS_lu,neq_ep+neq_cojo)) ! = [Z'X Z'M] LEFT_EP_act
+     allocate(interm_1(neq_ep+neq_cojo,neff_GWAS_lu)) ! =  LEFT_EP_act t[Z'X Z'M]
+     allocate(interm_2(neff_GWAS_lu,neff_GWAS_lu)) ! = t(interm_1) [X'Z M'Z]
+     allocate(interm_3(neff_GWAS_lu,1)) ! = t(interm_1) [X'y M'y]
      allocate(interm_4(neff_GWAS_lu,neff_GWAS_lu)) ! = Z'Z - interm_2
      allocate(interm_5(neff_GWAS_lu,1)) ! = Z'Y - interm_3
      allocate(interm_6(neq_ep+neq_cojo,1)) ! = RIGHT_EP_act - t(ZpXZpM)%*%SolVarGWAS
@@ -3868,6 +4490,29 @@ program SNP_GWAS_publi
      !endif
 
 
+     if(trim(fmttypgwas).eq.'minimac4') then
+
+        ! LECTURE DES DOSAGES POUR LES VARIANTS GWAS utiles et remplissage de vecDoses(1:nbind,1 ou 2)
+   
+        if(doses_to_geno.eq.1) allocate(matTempDoses2(nbind))  ! temporary vector to transform allelic dosages to discrete genotypes if needed
+        allocate(vecCharTemp1(num_champ_premId_St3-4)) ! temporary vector containing the first fields before dosages ; assume all vcf files have the same columns before animals dosages
+        max_Id = maxval(nbIdVcf)
+        print*,'Max number of individuals found in the ',nbfichvcf,' VCF files =',max_Id
+        allocate(vecCharTemp2(max_Id)) ! temporary vector containing the character strings including allelic dosage after : --> will be cut to get the dosage values
+
+        fin_lecture = .false. ! initialize nlvcf_prec before the first GWAS variant of the batch read in VCF files
+        nlvcf = 0
+        nlvcf_temp=0          ! counts the number of the line within pack of blockvcf lines when reading the VCF files by packs of blockvcf lines
+        batch=1               ! initialise the number of current batch of usefull variants
+        nbvarut=0             ! nb useful variants read
+        nbvarut_temp=0  
+
+        nlvcf_prec=0          ! initialize nlvcf_prec before the first GWAS variant of the batch read in VCF files
+
+     endif
+
+
+
 
      ! DEBUT DE LA BOUCLE SUR LES VARIANTS GWAS UTILES
 
@@ -3876,10 +4521,10 @@ program SNP_GWAS_publi
 
      do VarGWAS=1,nbGWASexec ! on effectue ceci pour chaque variant GWAS UTILE du sous groupe ou pour le nb fixe par utilisateur en OPTION
 
-        VarDiffCojo=1 ! on initialise a 1 le temoin iniduqnat si on doit traiter le variant GWAS ou passer au suivant (si info genomique identique a celle du variant Cojo on le saute)
+        VarDiffCojo=1 ! on initialise a 1 le temoin inidiquant si on doit traiter le variant GWAS ou passer au suivant (si info genomique identique a celle du variant Cojo on le saute)
         !  NB : un variant en DL complet avec le variant COJO doit etre saute
         ZpXZpM=0.0d0
-        vecGENO1=0.0d0
+        !vecGENO1=0.0d0
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -3888,29 +4533,155 @@ program SNP_GWAS_publi
            if(varGWAS.le.10) print*,'varGWAS=',varGWAS,' GWAStype=',GWAStype
         endif
 
-        vecDoses=0.0d0
-        vecDosesSD=0.0
-        vecDosesPond=0.0d0
+        !vecDoses=0.0d0    ! modif 27/05/2026
+        !vecDosesSD=0.0    ! modif 27/05/2026
+        !vecDosesPond=0.0d0    ! modif 27/05/2026
 
-        !vecDoses(:,1)=DOSES(:,VarGWAS)
-        read(io_dosesbin0) numVarGWASori(VarGWAS) , GWASuttoMAP_p3(VarGWAS) , SegmElim_p3(:,VarGWAS) , vecDosesSD(:)
-        vecDoses(:,1)=vecDosesSD
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        ! cas des anciens formats de fichiers dosages/typages variants SNP
+        if(fmttypgwas.ne.'minimac4') then
+           !vecDoses(:,1)=DOSES(:,VarGWAS)
+           read(io_dosesbin0) numVarGWASori(VarGWAS) , GWASuttoMAP_p3(VarGWAS) , SegmElim_p3(:,VarGWAS) , vecDosesSD(:)
+           vecDoses(:,1)=vecDosesSD
+        endif   ! fin du test if(fmttypgwas.ne.'minimac4')
+
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if(fmttypgwas.eq.'minimac4') then
+
+           ! on commence par lire les informations utlies sur le variant a traiter dans fichier binaire du sous groupe
+           read(io_dosesbin0) numVarGWASori(VarGWAS) , GWASuttoMAP_p3(VarGWAS) , SegmElim_p3(:,VarGWAS)
+           
+           !print*,' '
+           !print*,'**************************************'
+           !print*,'varGWAS=',varGWAS,' informations lues dans fichier io_dosesbin0 : '
+           !print*,'numVarGWASori(VarGWAS)=',numVarGWASori(VarGWAS)
+           !print*,'GWASuttoMAP_p3(VarGWAS)=',GWASuttoMAP_p3(VarGWAS)
+           !print*,'SegmElim_p3(:,VarGWAS)=',SegmElim_p3(:,VarGWAS)
+           !print*,' '
+
+
+           k_temp = 0 ! nb individuals cumulated over all the VCF files
+           nlvcf=0
+
+
+           ! VCF files are already open
+
+           !print*,' '
+           !print*,'nlvcf_prec=',nlvcf_prec
+           !print*,' '
+
+           do numfichvcf = 1, nbfichvcf  ! on va lire successivement dans tous les fichiers VCF
+
+              nlvcf=nlvcf_prec ! on reinitialise le numero de ligne des fichiers VCF auquel on s est arrete precedement 
+
+              ! on commence par sauter toutes les lignes inutiles PRECEDANT le prochain variant GWAS utile du sous-groupe = lignes d en-tete du VCF
+              ! et/ou variants des autres sous-groupes et/ou variants inutiles sur la plage du sous-groupe
+              do while ( (nlvcf.lt.(premLignevcf_St3 + GWASuttoMAP_p3(VarGWAS) - 1)).and.(.not.fin_lecture) )
+
+                 read(io_vcf(numfichvcf),*, iostat=io) temp_vcf ! temp_vcf=chaine de caracteres qui sert juste a aller une ligne plus loin
+                 if (io /= 0) then
+                    fin_lecture=.true.
+                    exit
+                 endif
+                 
+                 nlvcf = nlvcf + 1  ! new ligne in all the vcf files
+ 
+              enddo     ! a ce point on est place dans le fichier VCF numfichvcf a la ligne qui precede la ligne du variant utile qu on veut traiter
+
+              !print*,'fichier VCF numero ',numfichvcf,'  nlvcf juste avant le variant recherche pour varGWAS=',nlvcf
+
+              !------------------------
+              ! Lecture de la ligne du variant utile dans le fichier vcf
+              !------------------------
+              read(io_vcf(numfichvcf),*, iostat=io) numchr_vcf,pos_vcf,vecCharTemp1,format_vcf,vecCharTemp2(1:nbIdVcf(numfichvcf))
+              if (io /= 0) then
+                 fin_lecture=.true.
+                 exit
+              endif
+              
+              !print*,' '
+              !print*,'fichier VCF numero ',numfichvcf
+              !print*,'varGWAS=',varGWAS,' 10 premiers elements du vecteur vecCharTemp2(:) =',vecCharTemp2(1:10)
+              !print*,' '
+              
+              nlvcf=nlvcf+1 ! new ligne in all the vcf files
+
+              k_temp = cumul_nbind_prev_vcf(numfichvcf)
+
+              do j=1,nbIdVcf(numfichvcf)                   ! j = nuber of animal in the CURRENT VCF file
+
+                 k_temp = k_temp + 1                                 ! k = total number of animals already read SO FAR in the PREVIOUS VCF files AND in the CURRENT VCF file
+
+                 if(DosesUtil(ordinvdoses(k_temp)).ne.0) then   ! l individu est dans le fichier PERF donc ses doses sont utiles
+                    indice_temp=DosesUtil(ordinvdoses(k_temp)) 
+                    if(indice_temp.gt.nbind) then
+                       print*,' '
+                       print*,'PROBLEM : indice_temp > nbind number of useful animals'
+                       STOP 47
+                    endif
+                    pos = index(vecCharTemp2(j), ':')
+                    if (pos > 0) then
+                       ! Lecture interne de la partie numérique
+                       read(vecCharTemp2(j)(pos+1:), *) vecDoses(indice_temp,1)
+                    else
+                       ! Problem with format of dosage in VCF file
+                       print*,' '
+                       print*,'PROBLEM : format of allelic dosage in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                       STOP 46
+                    end if
+                 endif ! end of test is animal useful
+              enddo
+
+           enddo   ! on a avance dans tous les fichiers VCF
+
+           nlvcf_prec = nlvcf ! on prepare pour le tour du variant GWAS suivant dans la boucle do varGWAS=1,nbGWASexec
+           
+           !print*,'a la fin du tour de lecture de tous les fichiers VCF pour le variants varGWAS ',varGWAS,' du sous groupe = variant ',GWASuttoMAP_p3(VarGWAS),'nlvcf_prec=',nlvcf_prec
+           !print*,' '
+
+           !print*,' '
+           !print*,'varGWAS=',varGWAS,' 10 premiers elements du vecteur vecDoses(:) =',vecDoses(1:10,1)
+           !print*,' '
+
+           ! if User wants to convert allelic dosages into dicrete genotypes
+           if(doses_to_geno.eq.1) then
+              ! Transformation dosage → génotype vectorisée
+              matTempDoses2(1:nbind) = 0.0     ! initialisation à 0.0
+              matTempDoses2(vecDoses(1:nbind,1) > 0.5 .and. vecDoses(1:nbind,1) < 1.5) = 1.0
+              matTempDoses2(vecDoses(1:nbind,1) >= 1.5) = 2.0
+              vecDoses(1:nbind,1)=matTempDoses2(1:nbind)
+           endif
+
+        endif ! fin du test if(fmttypgwas.eq.'minimac4')
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
         ! SI COJO : on teste si les informations genomiques du variant sont differentes des informations genomiques pour le variant COJO
         if(indic_cojo.eq.1) then 
-           if(all(vecDosesSD==vecDosesSD_cojo(:,1))) VarDiffCojo=0
+              if(all(vecDoses(:,1)==vecDoses_cojo(:,1))) VarDiffCojo=0
         endif
 
         ! on calcule la moyenne des Doses pour le variant, pour avoir un equivalent de freq(Al2) pour le variant GWAS --> donnera une idee de la MAF
         call STAT_NUM(vecDoses(:,1),nbind,vec_stat_doses(1,VarGWAS),vec_stat_doses(2,VarGWAS)) ! 1ere ligne de vec_stat_doses=moy(doses) 2eme ligne de vec_stat_doses=std(doses)
 
         ! si on travaille sur dosages alleliques --> comptage des genotypes impossible --> on regarde si l ecart type des doses est nul = monomorphe
-        if((trim(fmttypgwas).eq.'minimac').and.(doses_to_geno.eq.0)) then
-           if(vec_stat_doses(2,VarGWAS).gt.0) tem_possible(1,varGWAS)=1
-        endif
+        !if((trim(fmttypgwas).eq.'minimac3').or.(trim(fmttypgwas).eq.'minimac4')) then
+        !   if(doses_to_geno.eq.0) then
+        if(is_minimac.and.(doses_to_geno.eq.0).and.(vec_stat_doses(2,VarGWAS).gt.0)) tem_possible(1,varGWAS)=1
+               !if(vec_stat_doses(2,VarGWAS).gt.0) tem_possible(1,varGWAS)=1
+        !   endif
+        !endif
 
         ! si on travaille sur des genotypes discrets --> on compte le nb d individus des genotypes 11, 12 et 22 et on renseigne tem_possible(1,varGWAS)
-        if( ((trim(fmttypgwas).eq.'minimac').and.(doses_to_geno.eq.1)).or.(trim(fmttypgwas).ne.'minimac') ) then
+        !if( (((trim(fmttypgwas).eq.'minimac3').or.(trim(fmttypgwas).eq.'minimac4')) .and.(doses_to_geno.eq.1)).or.((trim(fmttypgwas).ne.'minimac3').and.(trim(fmttypgwas).ne.'minimac4')) then
+        if( (is_minimac .and.(doses_to_geno.eq.1)) .or.(is_minimac.eq..false.) ) then
            !print*,'on passe dans le test des genotypes discrets'
            !print*,'vecDoses(1:50,1) = ',vecDoses(1:50,1)
            do i=1,nbind
@@ -3985,10 +4756,10 @@ program SNP_GWAS_publi
         if(TemDom.eq.1) then
            vecDoses(:,coldom)= (ABS((ABS(vecDoses(:,1)-1.0d0))-1.0d0)) ! Formule correcte mais inutilisable sur petit exemple car Dose1=Dose2 pour tous les animaux
            !vecDoses(:,2)= (ABS(vecDoses(:,1)-1.0d0))  ! pour test sur petit exemple
-           vecDosesPond(:,coldom)= vecDoses(:,coldom) * (sqrt(matPOIDS(:,1))) ! on multiplie la dose_Dom d un animal par son (poids)^0.5 pour mettre a 0 les doses des indiv sans perf
+           vecDosesPond(:,coldom)= vecDoses(:,coldom) * (sqrt_matPOIDS(:,1)) ! on multiplie la dose_Dom d un animal par son (poids)^0.5 pour mettre a 0 les doses des indiv sans perf
         endif
 
-        vecDosesPond(:,1)=vecDoses(:,1)*(sqrt(matPOIDS(:,1))) ! on multiplie la dose_Add d un animal par son (poids)^0.5 maintenant qu on a calcule vecDosesPondDom --> un animal sans perf aura dose=0
+        vecDosesPond(:,1)=vecDoses(:,1)*(sqrt_matPOIDS(:,1)) ! on multiplie la dose_Add d un animal par son (poids)^0.5 maintenant qu on a calcule vecDosesPondDom --> un animal sans perf aura dose=0
 
         if(detailed_log.eq.3) then
            if(neq_ep.lt.50) then
@@ -4313,7 +5084,7 @@ program SNP_GWAS_publi
                     do ef1=1,neff
                        do ef2=1,neff_cojo
                           if(matNivAnim_cojo(ef2,1,ind).ne.0) then
-                             row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) = row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) + (matWeight_cov(ef1,ind)*matWeight_cov_cojo(ef2,ind)*sqrt(matPOIDS(ind,1)))
+                             row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) = row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) + (matWeight_cov(ef1,ind)*matWeight_cov_cojo(ef2,ind)*sqrt_matPOIDS(ind,1))
                           endif
                        enddo
                     enddo
@@ -4321,14 +5092,27 @@ program SNP_GWAS_publi
               enddo
 
               ! on remplit row_cojo pour les variants parente  non exclus
+              Icum=FIRSTNIV_EP(neff+1)-1
               do ef1=1,nbSNP
+                 Icum1=Icum+ef1
                  if((ef1.lt.SegmElim_P3(1,VarGWAS)).or.(ef1.gt.(SegmElim_P3(2,VarGWAS)))) then  ! le SNPpar est a conserver dans les equations sinon 0
-                    ! on recentre les genotypes des nind individus pour le ef1 eme marqueur 
-                    vecGENO1=(dfloat(GENOPAR(:,ef1))-2.0d0*freqUtil(ef1))*(sqrt(matPOIDS(:,1))) ! on multplie par le (POIDS)^0.5 car on a deja multiplie matWeight_cov_cojo par les (POIDS)^0.5
+
+                    if(CentrGenoPar_st3.eq.0) then   ! on recentre les genotypes des nind individus pour le ef1 eme marqueur 
+                       vecGENO1=(dfloat(GENOPAR(:,ef1))-2.0d0*freqUtil(ef1))*(sqrt_matPOIDS(:,1)) ! on multplie par le (POIDS)^0.5 car on a deja multiplie matWeight_cov_cojo par les (POIDS)^0.5
+                    endif
+                    !if(CentrGenoPar_st3.eq.1) then   ! les genotypes des nind individus pour le ef1 eme marqueur sont deja recentres et ont deja ete multiplies par (POIDS)^0.5
+                    !   vecGENO1=SNPparUtCentr_St3(:,ef1)
+                    !endif
+
                     do ef2=1,neff_cojo
                        do ind=1,nbind
                           if(matNivAnim_cojo(ef2,1,ind).ne.0) then
-                             row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(neff+1)+ef1-1)) = row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,(FIRSTNIV_EP(neff+1)+ef1-1)) + vecGENO1(ind)*matWeight_cov_cojo(ef2,ind)
+                             if(CentrGenoPar_st3.eq.0) then 
+                                row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,Icum1) = row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,Icum1) + vecGENO1(ind)*matWeight_cov_cojo(ef2,ind)
+                             endif
+                             if(CentrGenoPar_st3.eq.1) then 
+                                row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,Icum1) = row_cojo(ef2+matNivAnim_cojo(ef2,1,ind)-1,Icum1) + SNPparUtCentr_St3(ind,ef1)*matWeight_cov_cojo(ef2,ind)
+                             endif
                           endif
                        enddo
                     enddo
@@ -4414,6 +5198,12 @@ program SNP_GWAS_publi
                     B11(i,j)=0.0d0
                  enddo
               enddo
+              !La version ci-dessous est-elle equivalente et plus rapide ?
+              !do j=2,neq_ep
+              !  B11(1:(j-1),j)=0.0d0
+              !enddo
+
+
 
               ! B21=t(B12) --> inutile de le calculer
 
@@ -4540,10 +5330,10 @@ program SNP_GWAS_publi
               do ind=1,nbind
                  if(matPERF(ind,1).ne.mis) then
                     do ef1=1,neff
-                       ZpXZpM(1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) = ZpXZpM(1,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) + (matWeight_cov(ef1,ind)*vecDosesPond(ind,1)*sqrt(matPOIDS(ind,1))) ! contribution pour effet additif
+                       ZpXZpM((FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1) , 1) = ZpXZpM((FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1) , 1) + (matWeight_cov(ef1,ind)*vecDosesPond(ind,1)*sqrt_matPOIDS(ind,1)) ! contribution pour effet additif
                        if(TemDom.eq.1) then ! si on a un effet de Dominance estimable pour le variant considere
                           !if(neff_GWAS.eq.2) then
-                          ZpXZpM(coldom,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) = ZpXZpM(coldom,(FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1)) + (matWeight_cov(ef1,ind)*vecDosesPond(ind,coldom)*sqrt(matPOIDS(ind,1))) ! contribution pour effet dominance
+                          ZpXZpM((FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1) , coldom) = ZpXZpM((FIRSTNIV_EP(ef1)+matNivAnim(ef1,1,ind)-1) , coldom) + (matWeight_cov(ef1,ind)*vecDosesPond(ind,coldom)*sqrt_matPOIDS(ind,1)) ! contribution pour effet dominance
                        endif
                     enddo
                  endif
@@ -4554,10 +5344,10 @@ program SNP_GWAS_publi
                  do ind=1,nbind
                     if(matPERF(ind,1).ne.mis) then
                        do ef1=1,neff_cojo 
-                          ZpXZpM(1,neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1) = ZpXZpM(1,neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1) + (matWeight_cov_cojo(ef1,ind)*vecDosesPond(ind,1)) ! contribution pour effet additif
+                          ZpXZpM(neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1 , 1) = ZpXZpM(neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1 , 1) + (matWeight_cov_cojo(ef1,ind)*vecDosesPond(ind,1)) ! contribution pour effet additif
                           if(TemDom.eq.1) then ! si on a un effet de Dominance estimable pour le variant considere
                              !if(neff_GWAS.eq.2) then
-                             ZpXZpM(coldom,neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1) = ZpXZpM(coldom,neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1) + (matWeight_cov_cojo(ef1,ind)*vecDosesPond(ind,coldom)) ! contribution pour effet dominance 
+                             ZpXZpM(neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1 , coldom) = ZpXZpM(neq_ep+ef1+matNivAnim_cojo(ef1,1,ind)-1 , coldom) + (matWeight_cov_cojo(ef1,ind)*vecDosesPond(ind,coldom)) ! contribution pour effet dominance 
                           endif
                        enddo
                     endif
@@ -4567,16 +5357,23 @@ program SNP_GWAS_publi
 
               ! on remplit (Z'M) pour les variants parente  non exclus
 
+              Icum=FIRSTNIV_EP(neff+1)-1
+
               do ef1=1,nbSNP
+                 Icum1=Icum+ef1
                  !if((ef1.lt.(FIRSTNIV_EP(neff+1) + SegmElim_P3(1,VarGWAS) -1)).or.(ef1.gt.(FIRSTNIV_EP(neff+1) + SegmElim_P3(2,VarGWAS) -1))) then  ! le SNPpar est a conserver dans les equations sinon 0
                  if((ef1.lt.SegmElim_P3(1,VarGWAS)).or.(ef1.gt.(SegmElim_P3(2,VarGWAS)))) then  ! le SNPpar est a conserver dans les equations sinon 0
 
-                    ! on recentre les genotypes des nind individus pour le ef1 eme marqueur 
-                    vecGENO1=(dfloat(GENOPAR(:,ef1))-2.0d0*freqUtil(ef1))*(sqrt(matPOIDS(:,1))) ! on multplie par le (POIDS)^0.5 car on a deja multiplie vecDosesPondAdd et vecDosesPondDom par les (POIDS)^0.5
+                    if(CentrGenoPar_st3.eq.0) then ! on recentre les genotypes des nind individus pour le ef1 eme marqueur 
+                       vecGENO1=(dfloat(GENOPAR(:,ef1))-2.0d0*freqUtil(ef1))*(sqrt_matPOIDS(:,1)) ! on multplie par le (POIDS)^0.5 car on a deja multiplie vecDosesPondAdd et vecDosesPondDom par les (POIDS)^0.5
+                       ZpXZpM(Icum1,1)=  dot_product(vecGENO1,vecDosesPond(:,1))
+                       if(TemDom.eq.1) ZpXZpM(Icum1,coldom)=  dot_product(vecGENO1,vecDosesPond(:,coldom)) ! si on a un effet de dominance estimable pour le variant GWAS considere
+                    endif
+                    if(CentrGenoPar_st3.eq.1) then ! les genotypes des nind individus pour le ef1 eme marqueur sont deja recentres et ont deja ete multiplies par (POIDS)^0.5
+                       ZpXZpM(Icum1,1)=  dot_product(SNPparUtCentr_St3(:,ef1),vecDosesPond(:,1))
+                       if(TemDom.eq.1) ZpXZpM(Icum1,coldom)=  dot_product(SNPparUtCentr_St3(:,ef1),vecDosesPond(:,coldom)) ! si on a un effet de dominance estimable pour le variant GWAS considere
+                    endif
 
-                    ZpXZpM(1,(FIRSTNIV_EP(neff+1)+ef1-1))=  dot_product(vecGENO1,vecDosesPond(:,1))
-                    !if(neff_GWAS.eq.2) ZpXZpM(2,(FIRSTNIV_EP(neff+1)+ef1-1))=  dot_product(vecGENO1,vecDosesPond(:,2))
-                    if(TemDom.eq.1) ZpXZpM(coldom,(FIRSTNIV_EP(neff+1)+ef1-1))=  dot_product(vecGENO1,vecDosesPond(:,coldom)) ! si on a un effet de dominance estimable pour le variant GWAS considere
                  endif
               enddo
 
@@ -4584,7 +5381,7 @@ program SNP_GWAS_publi
               !   print*,' '
               !   print*,'Variant GWAS ',varGWAS,' matrice ZpXZpM = '
               !   do i=1,neff_GWAS_lu
-              !      print*,ZpXZpM(i,:)
+              !      print*,ZpXZpM(:,i)
               !   enddo
               !   print*,' '
               !endif
@@ -4653,17 +5450,18 @@ program SNP_GWAS_publi
               ! **************************************************************************
 
               ! ==================================================================================
-              ! On calcule interm_1 = [Z'X Z'M] inv(LEFT_EP_act) pour le variant GWAS considere  
+              ! On calcule interm_1 =  inv(LEFT_EP_act) [Z'X Z'M] pour le variant GWAS considere  
+              !                        ATTENTION : dans cette version ZpXZpm = t(ZpXZpM) ancienne version = [XpZ MpZ]
               ! ==================================================================================
               interm_1=0.0d0
-              call dsymm('R','L',neff_GWAS,neq_ep_2,1.0d0,inf_LEFT_EP_act,neq_ep_2,ZpXZpM(1:neff_GWAS,:),neff_GWAS,1.0d0,interm_1(1:neff_GWAS,:),neff_GWAS)
+              call dsymm('L','L',neq_ep_2,neff_GWAS,1.0d0,inf_LEFT_EP_act,neq_ep_2,ZpXZpM(:,1:neff_GWAS),neq_ep_2,1.0d0,interm_1(:,1:neff_GWAS),neq_ep_2)
 
 
               ! ==================================================================================
-              ! On calcule interm_2 = interm1 t[Z'X Z'M] pour le variant GWAS considere  
+              ! On calcule interm_2 =  [Z'X Z'M] interm_1 pour le variant GWAS considere  
               ! ==================================================================================
               interm_2=0.0d0
-              call dgemm('N','T',neff_GWAS,neff_GWAS,neq_ep_2,1.0d0,interm_1(1:neff_GWAS,:),neff_GWAS,ZpXZpM(1:neff_GWAS,:),neff_GWAS,0.0d0,interm_2(1:neff_GWAS,1:neff_GWAS),neff_GWAS)
+              call dgemm('T','N',neff_GWAS,neff_GWAS,neq_ep_2,1.0d0,interm_1(:,1:neff_GWAS),neq_ep_2,ZpXZpM(:,1:neff_GWAS),neq_ep_2,0.0d0,interm_2(1:neff_GWAS,1:neff_GWAS),neff_GWAS)
 
 
               !print*,' '
@@ -4680,7 +5478,7 @@ program SNP_GWAS_publi
 
               interm_3=0.0d0
               !call dgemm('N','N',neff_GWAS,1,neq_ep_2,1.0d0,interm_1(1:neff_GWAS,1:neq_ep_2),neff_GWAS,RIGHT_EP_act(1:neq_ep_2,1),neq_ep_2,0.0d0,interm_3(1:neff_GWAS,1),neff_GWAS)
-              call dgemm('N','N',neff_GWAS,1,neq_ep_2,1.0d0,interm_1(1:neff_GWAS,1:neq_ep_2),neff_GWAS,RIGHT_EP_act(1:neq_ep_2,1:1),neq_ep_2,0.0d0,interm_3(1:neff_GWAS,1:1),neff_GWAS) ! modif JVDP
+              call dgemm('T','N',neff_GWAS,1,neq_ep_2,1.0d0,interm_1(1:neq_ep_2,1:neff_GWAS),neq_ep_2,RIGHT_EP_act(1:neq_ep_2,1:1),neq_ep_2,0.0d0,interm_3(1:neff_GWAS,1:1),neff_GWAS) ! modif JVDP
 
 
 
@@ -4766,7 +5564,7 @@ program SNP_GWAS_publi
                  interm_6=RIGHT_EP_act ! on initialise interm_6
 
                  !call dgemm('T','N',neq_ep_2 ,1 ,neff_GWAS ,-1.0d0,ZpXZpM(1:neff_GWAS,:),neff_GWAS ,sol_VarGWAS(1:neff_GWAS,VarGWAS),neff_GWAS ,1.0d0,interm_6(1:neq_ep_2,1),neq_ep_2 )
-                 call dgemm('T','N',neq_ep_2 ,1 ,neff_GWAS,-1.0d0,ZpXZpM(1:neff_GWAS,:),neff_GWAS,sol_VarGWAS(1:neff_GWAS,VarGWAS:VarGWAS),neff_GWAS ,1.0d0,interm_6(1:neq_ep_2,1:1),neq_ep_2 ) ! modif JVDP
+                 call dgemm('N','N',neq_ep_2 ,1 ,neff_GWAS,-1.0d0,ZpXZpM(:,1:neff_GWAS),neq_ep_2,sol_VarGWAS(1:neff_GWAS,VarGWAS:VarGWAS),neff_GWAS ,1.0d0,interm_6(1:neq_ep_2,1:1),neq_ep_2 ) ! modif JVDP
 
                  ! on calcule inverse(membre de gauche sans variant GWAS actualise) %*% interm_6 = solutions pour effets environnementaux et SNPparente avec variant GWAS dans modele
                  !call dsymm('L','L',neq_ep_2,1,1.0d0,inf_LEFT_EP_act,neq_ep_2,interm_6(1:neq_ep_2,1),neq_ep_2,0.0d0,BetaSnew,neq_ep_2)
@@ -4884,7 +5682,7 @@ program SNP_GWAS_publi
 
      print*,'Step_3 completed'
 
-  endif  ! End of paft executed if steptodo = 3
+  endif  ! End of part executed if steptodo = 3
 
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4918,6 +5716,8 @@ contains
     real(kind=8) x(100)
     !real(kind=8) xreal(100)
     character xc(100)*150
+
+    is_minimac=.false. 
 
     call getarg(1,parfile)
     parfile=adjustl(parfile)               ! ignore leading spaces 
@@ -5308,11 +6108,12 @@ contains
     call readline(io_p,x,xc,n) ! non obligatoire a renseigner en STEP_1, obligatoire en STEP_2 et STEP_3
     if(n.ne.0) then
        fmttypgwas=xc(1)
-       if((fmttypgwas.ne.'minimac').and.(fmttypgwas.ne.'typ_eval').and.(fmttypgwas.ne.'plink')) then
+       if((trim(fmttypgwas).ne.'minimac3').and.(trim(fmttypgwas).ne.'minimac4').and.(trim(fmttypgwas).ne.'typ_eval').and.(trim(fmttypgwas).ne.'plink')) then
           print*,'unknown : FORMAT_TYP_GWAS', xc(1)
-          print*,' Should be minimac or typ_eval or plink'
+          print*,' Should be minimac4 or minimac3 or typ_eval or plink'
           stop 21
        endif
+       if((fmttypgwas.eq.'minimac3').or.(fmttypgwas.eq.'minimac4')) is_minimac=.true.
     elseif(n.eq.0) then
        if(steptodo.ne.1) then
           print*,'Format for variant genotype/allelic dosage file is missing'
@@ -5322,6 +6123,29 @@ contains
        endif
     endif
     !if(steptodo.ne.1) print*,'Format for variant genotype/allelic dosage file = ',fmttypgwas
+
+    if(trim(fmttypgwas).eq.'minimac4') then
+       call readline(io_p,x,xc,n) 
+       if (xc(1) /= 'NUMBER_VCF') then
+          print*,'fmttypgawas= minimac4 but expected keyword NUMCHR_GWAS not found'
+          stop 21
+       endif
+       call readline(io_p,x,xc,n) ! non obligatoire a renseigner en STEP_1, obligatoire en STEP_2 et STEP_3
+       if(n.ne.0) then
+          nbfichvcf=x(1)
+          if((nbfichvcf.lt.1).and.(steptodo.ne.1)) then
+             print*,'Number of VCF files to be read with minimac4 format has to be >= 1'
+             stop 21
+          endif
+       elseif(n.eq.0) then
+          if(steptodo.ne.1) then
+             print*,'Number of VCF files to be read with minimac4 format is missing'
+             stop 21
+          elseif(steptodo.eq.1) then
+             nbfichvcf=0
+          endif
+       endif
+    endif
 
     !if(fmttypgwas.eq.'plink') then
     call readline(io_p,x,xc,n) 
@@ -5692,18 +6516,34 @@ contains
           endif
        endif
 
-       ! modif du 20 mars 2023 pour lire la valeur de meth_mpm si l utilisateur ne veut pas (=1) ou veut (=2) stocker les genotypes centres aux SNPpar en memoire
-       call getoption('meth_MpM',n,x,xc)
+       ! modif du 20 mars 2023 pour lire la valeur de CentrGenoPar_st1 si l utilisateur ne veut pas (=0) ou veut (=1) stocker les genotypes centres aux SNPpar en memoire
+       call getoption('CentrGenoPar_st1',n,x,xc)
        if (n > 0) then
-          read(xc(1),*) meth_mpm
+          read(xc(1),*) CentrGenoPar_st1
           print*,' '
-          print*,'Storage method chosen for Marker genotypes: non centered integers (=1) or centered reals (=2) :',meth_mpm
-          print*,'NB : 1 = lower memory usage by slower because genotypes must be centered when genotypes are needed'
-          if ((meth_mpm.ne.1).and.(meth_mpm.ne.2)) then
-             print*,'meth_MPM value is different from 1 and 2: ',meth_mpm
+          print*,'Storage method chosen for Marker genotypes in STEP 1: non centered integers (=1) or centered reals (=2) :',CentrGenoPar_st1
+          print*,'NB: 0 = lower memory usage by slower because genotypes must be centered when genotypes are needed'
+          if ((CentrGenoPar_st1.ne.0).and.(CentrGenoPar_st1.ne.1)) then
+             print*,'CentrGenoPar_st1 value is different from 0 and 1: ',CentrGenoPar_st1
              stop 20
           endif
        endif
+
+       ! modif du 27 ma1 2026 pour lire la valeur de CentrGenoPar_st3 si l utilisateur ne veut pas (=0) ou veut (=1) stocker les genotypes centres aux SNPpar en memoire
+       call getoption('CentrGenoPar_st3',n,x,xc)
+       if (n > 0) then
+          read(xc(1),*) CentrGenoPar_st3
+          print*,' '
+          print*,'Storage method chosen for Marker genotypes in STEP 3: non centered integers (=1) or centered reals (=2) :',CentrGenoPar_st3
+          print*,'NB: 0 = lower memory usage by slower because genotypes must be centered when genotypes are needed'
+          if ((CentrGenoPar_st3.ne.0).and.(CentrGenoPar_st3.ne.1)) then
+             print*,'CentrGenoPar_st3 value is different from 0 and 1: ',CentrGenoPar_st3
+             stop 20
+          endif
+       endif
+
+
+
 
        ! modif du 28 juil 2023 pour convertir les DOSES des variants GWAS en genotypes discrets = nb alleles 2 portes par individus
        call getoption('doses_to_geno',n,x,xc)
@@ -5715,6 +6555,30 @@ contains
              stop 20
           endif
        endif
+
+       call getoption('N_lines_VCF',n,x,xc)
+       if (n > 0) then
+          read(xc(1),*) blockvcf
+          print*,'Number of lines in each VCF file read and stored at each pass in Step 2 :',blockvcf
+          print*,'WARNING : large N_lines_VCF value requires more memory to store temporary table with VCF lines'
+          if ((blockvcf.le.0).or.(blockvcf.gt.5000)) then
+             print*,'N_lines_VCF value : ',blockvcf,' must be > 0 and <= 5000'
+             stop 20
+          endif
+       endif
+
+
+       ! modif 12/06/2026 to chose nb of threads for MKL parallelization - default = 2 (WARNING : a to high number of threads seems to degrade CPU time ???)  
+       call getoption('nb_threads_mkl',n,x,xc)
+       if (n > 0) then
+          read(xc(1),*) nb_threads_mkl
+          if((nb_threads_mkl.lt.1).or.(nb_threads_mkl.gt.10).or.(int(nb_threads_mkl).ne.nb_threads_mkl)) then
+             print*,'nb_threads_mkl has to be an integer in 1 - 10'
+             stop 20
+          endif
+       endif
+
+
 
        call getoption('end',n,x,xc)
        if(n <= 0) exit
@@ -6078,15 +6942,28 @@ contains
 
        print '('' Allelic dosage / Genotype file for GWAS variants: '',t90,a)',trim(typgwasfile)
        !on verifie que le fichier TYPAGES pour les GWAS existe bien
-       INQUIRE (FILE=trim(typgwasfile),EXIST=testpresfic)
-       if(testpresfic.eq..false.) then
-          print*,'Variant genotype/allelic dosage file does not exist'
-          STOP 21
+       if(trim(fmttypgwas).ne.'minimac4') then
+          INQUIRE (FILE=trim(typgwasfile),EXIST=testpresfic)
+          if(testpresfic.eq..false.) then
+             print*,'Variant genotype/allelic dosage file does not exist'
+             STOP 21
+          endif
+       endif
+       if(trim(fmttypgwas).eq.'minimac4') then
+          do i=1,nbfichvcf
+             write(fxvcf,'(i0)') i
+             INQUIRE (FILE=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf',EXIST=testpresfic)
+             if(testpresfic.eq..false.) then
+                print*,'Variant allelic dosage file number ',i,' does not exist'
+                print*,'Check if the other expected VCF file 1 to ',nbfichvcf,' exist'
+                STOP 21
+             endif
+          enddo
        endif
 
        print '('' Format of genotype file for GWAS: '',t90,a)',trim(fmttypgwas)
-       if((trim(fmttypgwas).ne.'minimac').and.(trim(fmttypgwas).ne.'typ_eval').and.(trim(fmttypgwas).ne.'plink')) then
-          print*,'Unknown format for GWAS variant genotype/allelic dosage file - has to be minimac or typ_eval or plink'
+       if((trim(fmttypgwas).ne.'minimac4').and.(trim(fmttypgwas).ne.'minimac3').and.(trim(fmttypgwas).ne.'typ_eval').and.(trim(fmttypgwas).ne.'plink')) then
+          print*,'Unknown format for GWAS variant genotype/allelic dosage file - has to be minimac4 or minimac3 or typ_eval or plink'
           STOP 21
        endif
 
@@ -6140,7 +7017,9 @@ contains
 
     print '('' MAF under wich a marker is considered monomorphous and is excluded (default=1d-3)= '',t110,D14.6)',MAFmin
 
-    print '('' Storage method chosen for Marker genotypes: non centered integers (=1) or centered reals (=2) : '',t110,i3)',meth_mpm
+    print '('' Storage method chosen for Marker genotypes in STEP 1: non centered integers (=0) or centered reals (=1) : '',t110,i3)',CentrGenoPar_st1
+
+    print '('' Storage method chosen for Marker genotypes in STEP 3: non centered integers (=0) or centered reals (=1) : '',t110,i3)',CentrGenoPar_st3
 
 
     !print '('' Nombre de coeurs pour factorisation Ann par MKL = '',t90,i3)',nb_threads_mkl
@@ -6255,7 +7134,7 @@ contains
   !========================================================================  
 
     ! the function normal_ttr calculates the P-value associated to the null hypothesis "x diff 0"
-    ! x is the test staistic
+    ! x is the test statistic
     ! dx is the step for approximate calculation of surface under the standard centered normal distribution (0.0001 by default)
     ! Pval_ref is a vector containing precalculated bilateral P-value for integers from 1 to 37
     ! The function approximates the surface Sx under the normal distribution curve from abs(x) to ceiling(abs(x)) with trapeze approxiamtion
@@ -6789,107 +7668,147 @@ end function normal_ttr2
 
 
 
-
-
   !========================================================================
-  subroutine vversion(cdate,anlim,molim,jlim)
-    !========================================================================
+subroutine read_block_buffer_fast_correc(unit_in, n_ind, col_ut_start, n_var_ut_block , max_line_len, buffer, i_last, n_ut)
+  !========================================================================
+
+  ! NB : col_ut_start = position of first USEFULL variant of the pass ; col_end = position of last USEFULL variant of the pass = col_ut_start + n_var_ut_block -1
 
     implicit none
-    character(len=128) :: cdate
-    integer :: annee,imo,anlim,i,molim,jlim,diff,jour
-    character(len=10) :: cal,mois,heure
-    character(len=3) :: mm(12)
-    !logical :: francais,english
 
-    data mm/'Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'/
+    integer, intent(in)  :: unit_in, n_ind, col_ut_start, n_var_ut_block, max_line_len
+    real,    intent(out) :: buffer(n_ind, n_var_ut_block)
+    integer, intent(out) :: i_last, n_ut
 
-    read (cdate,*) cal,mois,jour,heure,annee 
-    imo=0
-    do i=1,12
-       if (mois.eq.mm(i)) imo=i
-    end do
-    if (imo.eq.0) then
-       imo=1
-       print *,'probleme dans la date, Janvier suppose'
-    end if
+    character(len=max_line_len) :: line
+    character(len=64) :: id, tag
+    real :: tmp
+    integer :: i, j ,k ,ios, indice_temp, col_raw_start, col_raw_end, n_var_raw_block, n_ut_tmp
+    logical :: is_useful
+    real(kind=4),allocatable :: buffer_temp(:)
 
-    call ecdate(diff,anlim,molim,jlim,annee,imo,jour)
+    buffer = 0.0
 
-    print *
-    if (diff.gt.0) then
-       print *,'******************************************************'
-       print *,'***                                                ***'
-       print *,'***            Votre licence est perimee           ***'
-       print *,'***                                                ***'
-       print *,'***   Contactez INRAE G2B      pour la renouveler  ***'
-       print *,'***                                                ***'
-       print *,'******************************************************'
-       STOP 20
+    col_raw_start = GWASuttoMAP(col_ut_start-2) + 2
+    col_raw_end = GWASuttoMAP(col_ut_start-2 + n_var_ut_block - 1) + 2
+    n_var_raw_block = col_raw_end - col_raw_start + 1
+    print*,'n_var_raw_block=',n_var_raw_block
 
-    else if (diff.ge.-60) then
-       print *,'******************************************************'
-       print *,'***                                                ***'
-       print '(a36,i3,1x,a3,i5,a7)',' ***  Votre licence se terminera le ',jlim,mm(molim),anlim,'    ***'
-       print *,'***                                                ***'
-       print *,'***  Contactez INRAE G2B       pour la renouveler  ***'
-       print *,'***                                                ***'
-       print *,'******************************************************'
-    end if
+    allocate(buffer_temp(n_var_raw_block))
 
-    print *
-    print *
-    return
+    do i = 1, n_ind
 
-    !========================================================================
-  end subroutine vversion
-  !========================================================================
+        read(unit_in,'(A)', iostat=ios) line
+        if (ios /= 0) exit
 
+        is_useful = (DosesUtil(ordinvdoses(i)) /= 0)
+        if (is_useful) indice_temp = DosesUtil(ordinvdoses(i))
 
+        if (is_useful) then
+            read(line,*, iostat=ios) id, tag, &
+                 (tmp, j=1, col_raw_start-3), &
+                 (buffer_temp(j), j=1, n_var_raw_block)
+            n_ut_tmp=0
+            do k=1,n_var_raw_block
+               if(MAPtoGWASut(col_raw_start - 2 + k -1 ).ne.0) then
+                  n_ut_tmp = n_ut_tmp + 1
+                 buffer(indice_temp,n_ut_tmp)=buffer_temp(k)
+              endif
+           enddo
+        else
+            read(line,*, iostat=ios) id, tag, &
+                 (tmp, j=1, col_raw_start-3 + n_var_raw_block)
+        end if
 
-  !========================================================================
-  subroutine ecdate(diff,alim,mlim,jlim,annee,mois,jour)
-    !========================================================================
+        if (ios /= 0) then
+            write(*,*) "Error while reading line ", i
+            stop
+        end if
 
-    integer mc(12)
-    integer jour,mois,annee,alim,mlim,jlim
-    integer j1,m1,a1,j2,m2,a2
-    integer i,diff
-    logical test
-    data mc/0,31,59,90,120,151,181,212,243,273,304,334/
-    j1=jour ; m1=mois ; a1=annee
-    j2=jlim ; m2=mlim ; a2=alim
-
-    test=.false.
-    if (a1.gt.a2) test=.true.
-    if (a1.eq.a2.and.m1.gt.m2) test=.true.
-    if (a1.eq.a2.and.m1.eq.m2.and.j1.gt.j2) test=.true.
-
-    if (test) then
-       i=j1 ; j1=j2; j2=i
-       i=m1 ; m1=m2; m2=i
-       i=a1 ; a1=a2; a2=i
-    end if
-
-
-    diff=365*a1 + mc(m1) + j1
-    diff=diff - (365*a2 + mc(m2) + j2)
-
-    do i=a2, a1
-       if (mod(i,4).eq.0) then 
-          diff=diff+1
-          if (i.eq.a2.and.m2.gt.2) diff=diff-1
-          if (i.eq.a1.and.m1.le.2) diff=diff-1
-       end if
     end do
 
-    if (test) diff=-diff
+    i_last = i - 1
+    n_ut = n_ut_tmp
 
-    return
+    deallocate(buffer_temp)
 
-    !========================================================================
-  end subroutine ecdate
+end subroutine read_block_buffer_fast_correc
   !========================================================================
+
+
+
+  !========================================================================
+subroutine read_block_DtG_buffer_fast_correc(unit_in, n_ind, col_ut_start, n_var_ut_block , max_line_len, buffer, i_last, n_ut)
+  !========================================================================
+
+  ! NB : col_ut_start = position of first USEFULL variant of the pass ; col_end = position of last USEFULL variant of the pass = col_ut_start + n_var_ut_block -1
+
+    implicit none
+
+    integer, intent(in)  :: unit_in, n_ind, col_ut_start, n_var_ut_block, max_line_len
+    real,    intent(out) :: buffer(n_ind, n_var_ut_block)
+    integer, intent(out) :: i_last, n_ut
+
+    character(len=max_line_len) :: line
+    character(len=64) :: id, tag
+    real :: tmp
+    integer :: i, j ,k ,ios, indice_temp, col_raw_start, col_raw_end, n_var_raw_block, n_ut_tmp
+    logical :: is_useful
+    real(kind=4),allocatable :: buffer_temp1(:),buffer_temp2(:)
+
+    buffer = 0.0
+
+    col_raw_start = GWASuttoMAP(col_ut_start - 2) + 2
+    col_raw_end = GWASuttoMAP(col_ut_start - 2 + n_var_ut_block - 1) + 2 
+    n_var_raw_block = col_raw_end - col_raw_start + 1
+    allocate(buffer_temp1(n_var_raw_block),buffer_temp2(n_var_raw_block))
+
+    do i = 1, n_ind
+
+        read(unit_in,'(A)', iostat=ios) line
+        if (ios /= 0) exit
+
+        is_useful = (DosesUtil(ordinvdoses(i)) /= 0)
+        if (is_useful) indice_temp = DosesUtil(ordinvdoses(i))
+
+        if (is_useful) then
+            read(line,*, iostat=ios) id, tag, &
+                 (tmp, j=1, col_raw_start-3), &
+                 (buffer_temp1(j), j=1, n_var_raw_block)
+
+            ! Transformation dosage → génotype vectorisée
+            buffer_temp2(1:n_var_raw_block) = 0.0     ! initialisation à 0.0
+            buffer_temp2(buffer_temp1 > 0.5 .and. buffer_temp1 < 1.5) = 1.0
+            buffer_temp2(buffer_temp1 >= 1.5) = 2.0
+            
+            n_ut_tmp=0
+            do k=1,n_var_raw_block
+               if(MAPtoGWASut(col_raw_start - 2 + k - 1).ne.0) then
+                  n_ut_tmp = n_ut_tmp + 1
+                 buffer(indice_temp,n_ut_tmp)=buffer_temp2(k)
+              endif
+           enddo
+        else
+            read(line,*, iostat=ios) id, tag, &
+                 (tmp, j=1, col_raw_start-3 + n_var_raw_block)
+        end if
+
+        if (ios /= 0) then
+            write(*,*) "Error while reading line", i
+            stop
+        end if
+
+    end do
+
+    i_last = i - 1
+    n_ut = n_ut_tmp
+
+    deallocate(buffer_temp1,buffer_temp2)
+
+end subroutine read_block_DtG_buffer_fast_correc
+  !========================================================================
+
+
 
 
 
@@ -7660,7 +8579,7 @@ end function normal_ttr2
 
 
                                       !========================================================================
-                                    end program SNP_GWAS_publi
+                                    end program SNP_GWAS
                                        !========================================================================
 
 
