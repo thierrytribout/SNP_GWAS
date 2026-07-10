@@ -15,7 +15,7 @@ The advantage of this option is that the size of the M’M matrix is equal to th
 
 The software has been conceived to perform single-trait GWAS at sequence level, i.e. for a very large number of biallelic variants.
 It analyses the chromosomes separately, by parallelizing analyses of groups of variants of a same chromosome. 
-The companion program Cumul_Res_SG, also developped in Fortran90, gathers the results from the various variant groups in a single result file, which can the be used as input for Manhattan plots or other analyses.
+The companion program Cumul_Res_SG, also developped in Fortran90, gathers the results from the various variant groups in a single result file, which can then be used as input for Manhattan plots or other analyses.
 
 Authors:
 Thierry Tribout and Didier Boichard
