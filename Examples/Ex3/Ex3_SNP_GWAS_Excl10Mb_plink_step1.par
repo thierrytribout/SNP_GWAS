@@ -1,0 +1,51 @@
+# param file for SNP_GWAS Step1: estimate additive and dominance effects from discrete genotype plink file
+STEPS
+1
+EXEC_PATH
+/home/SNP_GWAS/BIN/SNP_GWAS
+BIN_DIR
+/travail/ttribout/RUMIGEN/r12/GWAS_add_dom/lait/CAR1/binfiles
+DATAFILE
+/seldiv_save/RUMIGEN/DATA/r12/lait/CAR1/PerfGWAS_L1_typ_lait_CAR1.txt
+NUMBER_OF_EFFECTS
+2
+POS_ID_CHAR
+6
+OBSERVATION(S)
+4
+WEIGHT(S)
+3
+EFFECTS: POSITIONS_IN_DATAFILE NUMBER_OF_LEVELS TYPE_OF_EFFECT  [EFFECT NESTED]
+1 1 cross
+2 1 cov
+RESIDUAL_VARIANCE
+611660
+GENETIC_VARIANCE
+329160
+TYP_PAR_FILE
+/seldiv_save/RUMIGEN/DATA/r12/Data_all_chr_50K.raw
+FORMAT_TYP_PAR
+plink
+MAP_PAR_FILE
+/seldiv_save/RUMIGEN/DATA/r12/Data_all_chr_50K.map
+TYP_GWAS_FILE
+
+FORMAT_TYP_GWAS
+
+NUMCHR_GWAS
+
+MAP_GWAS_FILE
+
+GWAS_TYPE (add / add_dom)
+
+SEGM_REM
+
+COJO
+
+OPTION missing -9999.0
+OPTION MAF_minimum 0.10
+OPTION SelAutoSNPpar 20000
+OPTION NbMaxVarGWAS 5000
+OPTION CalcVarRes optim
+OPTION seuil_test1 2.0
+OPTION StepFichOut 100

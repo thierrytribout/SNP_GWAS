@@ -1,0 +1,14 @@
+Work Directory
+/travail/ttribout/GWAS_DBO_chr21/Excl10Mb_add/GWAS
+File containing the Groups and Batches information
+Infos_all_Gr_SG_chr21.txt
+Effects considered for the GWAS Variants (add / add_dom)
+add
+Strategy for computing variance of residuals (approx  optim  exact)
+optim
+GWAS Variant MAP file
+/travail/ttribout/GWAS_DBO_chr21/map_varGWAS
+Format for GWAS Variant MAP file (plink, typ_eval)
+typ_eval
+Final Result file name
+Res_Final_chr21_Excl10Mb_add.txt

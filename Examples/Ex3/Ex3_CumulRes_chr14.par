@@ -1,0 +1,14 @@
+Work Directory
+/travail/ttribout/RUMIGEN/r12/GWAS_add_dom/lait/CAR1/GWAS
+File containing the Groups and Batches information
+Infos_all_Gr_SG_chr14.txt
+Effects considered for the GWAS Variants (add / add_dom)
+add_dom
+Strategy for computing variance of residuals (approx  optim  exact)
+optim
+GWAS Variant MAP file
+/seldiv_save/RUMIGEN/DATA/r12/Data_all_chr_50K.map
+Format for GWAS Variant MAP file (plink  typ_eval)
+plink
+Final Result file name
+Res_Final_r12_lait_car1_chr14_Excl10Mb_AD_avr25.txt

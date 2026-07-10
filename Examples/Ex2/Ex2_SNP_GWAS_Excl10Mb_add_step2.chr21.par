@@ -1,0 +1,52 @@
+# param file for SNP_GWAS Step2: estimate additive effects from 1 minimac3 allelic dosage file on chrom 21
+STEPS
+2
+EXEC_PATH
+/home/SNP_GWAS/BIN/SNP_GWAS
+BIN_DIR
+/travail/ttribout/GWAS_DBO_chr21/Excl10Mb_add_m3/binfiles
+DATAFILE
+/travail/ttribout/GWAS_DBO_chr21/perf_file
+NUMBER_OF_EFFECTS
+1
+POS_ID_CHAR
+3
+OBSERVATION(S)
+2
+WEIGHT(S)
+
+EFFECTS: POSITIONS_IN_DATAFILE NUMBER_OF_LEVELS TYPE_OF_EFFECT  [EFFECT NESTED]
+1 1 cross
+RESIDUAL_VARIANCE
+5358
+GENETIC_VARIANCE
+342
+TYP_PAR_FILE
+/travail/ttribout/GWAS_DBO_chr21/SNP_genotypes
+FORMAT_TYP_PAR
+typ_eval
+MAP_PAR_FILE
+/travail/ttribout/GWAS_DBO_chr21/map_SNP
+TYP_GWAS_FILE
+/travail/ttribout/GWAS_DBO_chr21/r46_chr21.mach.dose
+FORMAT_TYP_GWAS
+minimac3
+NUMCHR_GWAS
+21
+MAP_GWAS_FILE
+/travail/ttribout/GWAS_DBO_chr21/map_varGWAS
+GWAS_TYPE (add / add_dom)
+add
+SEGM_REM
+10000000
+COJO
+0
+OPTION missing -9999.0
+OPTION MAF_minimum 0.0
+OPTION NbMaxVarGWAS 7500
+OPTION CalcVarRes optim
+OPTION seuil_test1 2.0
+OPTION StepFichOut 100
+OPTION MaxMem 3d+10
+OPTION CentrGenoPar_st1 1
+OPTION CentrGenoPar_st3 1
