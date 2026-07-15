@@ -1,5 +1,7 @@
 The following paramter files are examples for GWAS on chromosome 14:
 
+- use of genotype (.raw) and map (.map) files prepared with PLINK software
+
 - estimate ADDITIVE AND DOMINANCE effects of the variants (GWAS_TYPE = add_dom)
 
 - The GWAS model includes a fixed overal mean AND A FIXED REGRESSION COEFFICIENT whose covariate is in 2nd column of perfromance file
