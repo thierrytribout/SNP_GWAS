@@ -2,6 +2,8 @@ The following paramter files are examples for GWAS on chromosome 21:
 
 - estimate additive effect of the variants (GWAS_TYPE = add)
 
+- use allelic dosages for GWAS variants in 8 minimac4 VCF files
+
 - GWAS model: y = overall_mean + breeding_value + g*add + e
 
 - allelic dosages are provided in 8 minimac4 VCF files named:
