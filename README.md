@@ -25,3 +25,5 @@ thierry.tribout@inrae.fr ; didier.boichard@inrae.fr
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 See the LICENSE file for more details.
+
+Citation : Tribout, T., Boichard, D. (2026) SNP_GWAS: a flexible genome-wide association study software adapted for very large designs, Proceedings 13th World Congress on Genetics Applied to Livestock Production 23824: https://doi.org/10.31274/wcgalp.23824
