@@ -28,7 +28,7 @@ typ_eval
 MAP_PAR_FILE
 /travail/ttribout/GWAS_DBO_chr21/map_SNP
 TYP_GWAS_FILE
-/travail/ttribout/GWAS_DBO_chr21/SEQ_r46_chr21_
+/travail/ttribout/GWAS_DBO_chr21/SEQ_r46_chr21_NNN.dose.vcf
 FORMAT_TYP_GWAS
 minimac4
 NUMBER_VCF
