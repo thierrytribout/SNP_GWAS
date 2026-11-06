@@ -17,7 +17,9 @@ program SNP_GWAS
   !  See the LICENSE file for more details.
 
 
-  ! 09/07/2026 : new version SNP_GWAS V1.1 = code SNP_GWAS_publi_testAccel_lecVCF3_chNbThr_boucle.f90 08/07/2026 that can handle minimac4 VCF files
+  ! 03/11/2026 : SNP_GWAS V1.2 : changes to read either most probable genotypes or allelic dosages in VCF minimac4 files
+
+  ! 09/07/2026 : new version SNP_GWAS V1.1 08/07/2026 that can handle minimac4 VCF files
 
 
   implicit none
@@ -92,7 +94,8 @@ program SNP_GWAS
   character(len=20),allocatable ::vecCharTemp1(:)
   character(len=20),allocatable :: vecCharTemp2(:)
   character(len=20)::format_VCF
-  integer            :: numfichvcf, nbfichvcf, nbIdVcfTemp
+  integer            :: numfichvcf, nbfichvcf, nbIdVcfTemp, posNNN
+  character(len=300)::nameVCFfile
   integer,allocatable::io_vcf(:)
   integer,allocatable::nbIdVcf(:)
   integer            :: nlvcf, nlvcf_prec, nbchamps, ncpId, numchr_vcf, max_Id, nbvarut, nbvarut_temp, nlvcf_temp,nlvcf_endblock
@@ -333,6 +336,7 @@ program SNP_GWAS
   real(kind=8),allocatable::ZpY(:,:) ! matrice [ZpY]
   real(kind=8),allocatable::vecDosesPond(:,:) ! vecteur (si GWAS additif) ou matrice (si GWAS additif+dominance) contenant les doses pour le GWAS = Dose*sqrt(poids)
   real(kind=8),allocatable::vecDoses(:,:) ! vecteur (si GWAS additif) ou matrice (si GWAS additif+dominance) contenant les doses pour le GWAS = Dose
+  real(kind=8)::Al1_tmp,Al2_tmp  ! temporary paternal / maternal alternative allle when reading most probable genotype in minimac4 VCF files
   real(kind=8),allocatable::vec_stat_doses(:,:)
   integer,allocatable::tem_possible(:,:)
   real(kind=4),allocatable::vecDosesSD(:)
@@ -406,8 +410,8 @@ program SNP_GWAS
 
   print*,'****************************************'
   print*,'*                                      *'
-  print*,'*          SNP_GWAS V1.1               *' 
-  print*,'*       Version 08 jul 2026            *' 
+  print*,'*          SNP_GWAS V1.2               *' 
+  print*,'*       Version 06 nov 2026            *' 
   print*,'*                                      *'
   print*,'   ',jour
   print*,'*                                      *'
@@ -2523,12 +2527,34 @@ program SNP_GWAS
 
         allocate(io_vcf(nbfichvcf))
         io_vcf=0
+
+        ! Recherche de la position de la chaine NNN
+        posNNN = index(trim(typgwasfile), 'NNN')
+
+        ! Vérification de la présence de NNN
+        if (posNNN == 0) then
+           write(*,*) 'ERROR :  NNN string is missing in minimac4 VCF file names'
+           stop
+        endif
+
         do numfichvcf = 1, nbfichvcf
            io_vcf(numfichvcf) = 80 + numfichvcf
            write(fxvcf,'(i0)') numfichvcf
-           open(io_vcf(numfichvcf), file=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf', status='old')
-        enddo
 
+           ! Construction du nom du fichier
+           nameVCFfile = trim(typgwasfile(1:posNNN-1))//trim(fxvcf)//trim(typgwasfile(posNNN+3:))
+
+           ! check if the considered VCF file exists
+             INQUIRE (FILE=nameVCFfile,EXIST=testpresfic)
+             if(testpresfic.eq..false.) then
+                print*,'Variant allelic dosage file number ',numfichvcf,' : ',nameVCFfile,' does not exist'
+                print*,'Check if the other expected VCF file 1 to ',nbfichvcf,' exist'
+                STOP 21
+             endif
+
+           ! Ouverture du fichier
+           open(io_vcf(numfichvcf), file=trim(nameVCFfile), status='old')
+        enddo
 
 
         do numfichvcf = 1, nbfichvcf
@@ -3845,11 +3871,35 @@ program SNP_GWAS
         ! opening all the VCF files
         allocate(io_vcf(nbfichvcf))
         io_vcf=0
-        do numfichvcf = 1, nbfichvcf  
+
+        ! Recherche de la position de la chaine NNN
+        posNNN = index(trim(typgwasfile), 'NNN')
+
+        ! Vérification de la présence de NNN
+        if (posNNN == 0) then
+           write(*,*) 'ERROR :  NNN string is missing in minimac4 VCF file names'
+           stop
+        endif
+
+        do numfichvcf = 1, nbfichvcf
            io_vcf(numfichvcf) = 80 + numfichvcf
            write(fxvcf,'(i0)') numfichvcf
-           open(io_vcf(numfichvcf), file=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf', status='old')
+
+           ! Construction du nom du fichier
+           nameVCFfile = trim(typgwasfile(1:posNNN-1))//trim(fxvcf)//trim(typgwasfile(posNNN+3:))
+
+           ! check if the considered VCF file exists
+             INQUIRE (FILE=nameVCFfile,EXIST=testpresfic)
+             if(testpresfic.eq..false.) then
+                print*,'Variant allelic dosage file number ',numfichvcf,' : ',nameVCFfile,' does not exist'
+                print*,'Check if the other expected VCF file 1 to ',nbfichvcf,' exist'
+                STOP 21
+             endif
+
+           ! Ouverture du fichier
+           open(io_vcf(numfichvcf), file=trim(nameVCFfile), status='old')
         enddo
+
      endif
 
 
@@ -3962,7 +4012,7 @@ program SNP_GWAS
            if (ionldoses .ne. 0) exit
         enddo
         print*,' '
-        print*,'valeur de nldoses = nb total indiv dans l ensemble des fichiers VCF a lire = nldoses = ',nldoses
+        print*,'nldoses = total nb of indiv  in all VCF files to read = ',nldoses
         print*,' '
         close(io_nldoses)
 
@@ -3998,9 +4048,9 @@ program SNP_GWAS
         endif
         
         print*,' '
-        print*,'Fichiers vec_DosesUtil_all_Gr_SG_chrXX.txt et vec_ordinvdoses_all_Gr_SG_chrXX.txt lus'
-        print*,'Premiers elements du vecteur DosesUtil : ',DOsesUtil(1:10)
-        print*,'Premiers elements du vecteur ordinvdoses : ',ordinvdoses(1:10)
+        print*,'Files vec_DosesUtil_all_Gr_SG_chrXX.txt and vec_ordinvdoses_all_Gr_SG_chrXX.txt read'
+        print*,'First elements in vector DosesUtil : ',DOsesUtil(1:10)
+        print*,'First elements in vector ordinvdoses : ',ordinvdoses(1:10)
         print*,' '
 
         close(io_DosesUtil0)
@@ -4033,7 +4083,7 @@ program SNP_GWAS
         ! cas des anciens formats de fichiers dosages/typages variants SNP
         if(trim(fmttypgwas).ne.'minimac4') then
 
-           print*,'fichier contenant les doses du variants COJO= ',trim(chem_dosesCojo)
+           print*,'File containing doses for COJO variant = ',trim(chem_dosesCojo)
 
            open(io_dosesCojo,file=trim(cojofile),form="unformatted")
 
@@ -4042,7 +4092,7 @@ program SNP_GWAS
 
            if(GWAStype.eq.'add_dom') vecDosesSD_cojo(1:nbind,2) = (ABS((ABS(vecDosesSD_cojo(1:nbind,1)-1.0d0))-1.0d0))
 
-           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+           if(detailed_log.eq.3) print*,'Line containing doses or genotypes for COJO variant read - numvar_cojo=',numvar_cojo
 
            vecDoses_cojo=vecDosesSD_cojo*1.0d0
 
@@ -4057,13 +4107,13 @@ program SNP_GWAS
 
         if(trim(fmttypgwas).eq.'minimac4') then
 
-           print*,'fichier contenant les doses du variants COJO= ',trim(chem_dosesCojo)
+           print*,'File containing dosages or genotypes for COJO variant = ',trim(chem_dosesCojo)
 
            open(io_dosesCojo,file=trim(cojofile),form="unformatted")
 
            read(io_dosesCojo) j,numvar_cojo,temp3(1:3)
 
-           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+           if(detailed_log.eq.3) print*,'Line containing doses or genotypes for COJO variant read - numvar_cojo=',numvar_cojo
 
            close(io_dosesCojo)
 
@@ -4118,9 +4168,34 @@ program SNP_GWAS
                        STOP 47
                     endif
                     pos = index(vecCharTemp2(j), ':')
-                    if (pos > 0) then
+
+
+                    if (pos .eq. 4) then
                        ! Lecture interne de la partie numérique
-                       read(vecCharTemp2(j)(pos+1:), *) vecDoses_cojo(indice_temp,1)
+                       ! user works on allelic dosages
+                       if(doses_to_geno.eq.0) read(vecCharTemp2(j)(5:), *) vecDoses_cojo(indice_temp,1)
+                       ! user works on the most probable genotype
+                       if(doses_to_geno.eq.1) then
+                          if (vecCharTemp2(j)(1:1).eq.'0'.or.vecCharTemp2(j)(1:1).eq.'1') then
+                             if (vecCharTemp2(j)(3:3).eq.'0'.or.vecCharTemp2(j)(3:3).eq.'1') then
+                                read(vecCharTemp2(j)(1:1), *) Al1_tmp
+                                read(vecCharTemp2(j)(3:3), *) Al2_tmp
+                                vecDoses_cojo(indice_temp,1) = Al1_tmp + Al2_tmp
+                             else
+                                ! Missing or invalid genotype
+                                !vecDoses(indice_temp,1) = -9999.d0
+                                print*,' '
+                                print*,'PROBLEM : undefined most probable genotype in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                                STOP 46
+                             endif
+                          else
+                             ! Missing or invalid genotype
+                             !vecDoses(indice_temp,1) = -9999.d0
+                             print*,' '
+                             print*,'PROBLEM : undefined most probable genotype in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                             STOP 46
+                          endif
+                       endif
                     else
                        ! Problem with format of dosage in VCF file
                        print*,' '
@@ -4134,20 +4209,9 @@ program SNP_GWAS
 
            enddo   ! on a avance dans tous les fichiers VCF
 
-           ! if User wants to convert allelic dosages into dicrete genotypes
-           if(doses_to_geno.eq.1) then
-              allocate(matTempDoses2(nbind))
-              ! Transformation dosage → génotype vectorisée
-              matTempDoses2(1:nbind) = 0.0     ! initialisation à 0.0
-              matTempDoses2(vecDoses_cojo(1:nbind,1) > 0.5 .and. vecDoses_cojo(1:nbind,1) < 1.5) = 1.0
-              matTempDoses2(vecDoses_cojo(1:nbind,1) >= 1.5) = 2.0
-              vecDoses_cojo(1:nbind,1)=matTempDoses2(1:nbind)
-              deallocate(matTempDoses2)
-           endif
-
            if(GWAStype.eq.'add_dom') vecDoses_cojo(1:nbind,2) = (ABS((ABS(vecDoses_cojo(1:nbind,1)-1.0))-1.0))
 
-           if(detailed_log.eq.3) print*,'Ligne  du fichier Doses pour variant COJO lue - numvar_cojo=',numvar_cojo
+           if(detailed_log.eq.3) print*,'Line of VCF file for COJO variant read - numvar_cojo=',numvar_cojo
 
         endif ! fin du test if(fmttypgwas.eq.'minimac4')
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -4604,11 +4668,14 @@ program SNP_GWAS
                  exit
               endif
               
-              !print*,' '
-              !print*,'fichier VCF numero ',numfichvcf
-              !print*,'varGWAS=',varGWAS,' 10 premiers elements du vecteur vecCharTemp2(:) =',vecCharTemp2(1:10)
-              !print*,' '
-              
+
+              !if((pos_vcf.eq.192416).or.(pos_vcf.eq.192443).or.(pos_vcf.eq.192451)) then
+              !   print*,' '
+              !   print*,'fichier VCF numero ',numfichvcf
+              !   print*,'varGWAS=',varGWAS,' 20 premiers elements du vecteur vecCharTemp2(:) =',vecCharTemp2(1:20)
+              !   print*,' '
+              !endif
+
               nlvcf=nlvcf+1 ! new ligne in all the vcf files
 
               k_temp = cumul_nbind_prev_vcf(numfichvcf)
@@ -4624,10 +4691,34 @@ program SNP_GWAS
                        print*,'PROBLEM : indice_temp > nbind number of useful animals'
                        STOP 47
                     endif
+                    ! search for position of : separating most probable genotype at variant and allelic dosage in 0|0:0.123
                     pos = index(vecCharTemp2(j), ':')
-                    if (pos > 0) then
+                    if (pos .eq. 4) then
                        ! Lecture interne de la partie numérique
-                       read(vecCharTemp2(j)(pos+1:), *) vecDoses(indice_temp,1)
+                       ! user works on allelic dosages
+                       if(doses_to_geno.eq.0) read(vecCharTemp2(j)(5:), *) vecDoses(indice_temp,1)
+                       ! user works on the most probable genotype
+                       if(doses_to_geno.eq.1) then
+                          if (vecCharTemp2(j)(1:1).eq.'0'.or.vecCharTemp2(j)(1:1).eq.'1') then
+                             if (vecCharTemp2(j)(3:3).eq.'0'.or.vecCharTemp2(j)(3:3).eq.'1') then
+                                read(vecCharTemp2(j)(1:1), *) Al1_tmp
+                                read(vecCharTemp2(j)(3:3), *) Al2_tmp
+                                vecDoses(indice_temp,1) = Al1_tmp + Al2_tmp
+                             else
+                                ! Missing or invalid genotype
+                                !vecDoses(indice_temp,1) = -9999.d0
+                                print*,' '
+                                print*,'PROBLEM : undefined most probable genotype in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                                STOP 46
+                             endif
+                          else
+                             ! Missing or invalid genotype
+                             !vecDoses(indice_temp,1) = -9999.d0
+                             print*,' '
+                             print*,'PROBLEM : undefined most probable genotype in VCF file #',numfichvcf,' for individual ',j,' and variant ',nlvcf
+                             STOP 46
+                          endif
+                       endif
                     else
                        ! Problem with format of dosage in VCF file
                        print*,' '
@@ -4636,6 +4727,13 @@ program SNP_GWAS
                     end if
                  endif ! end of test is animal useful
               enddo
+
+              !if((pos_vcf.eq.192416).or.(pos_vcf.eq.192443).or.(pos_vcf.eq.192451)) then
+              !   print*,' '
+              !   print*,'fichier VCF numero ',numfichvcf
+              !   print*,'varGWAS=',varGWAS,' 20 premiers elements du vecteur vecDoses(:,1) =',vecDoses(1:20,1)
+              !   print*,' '
+              !endif
 
            enddo   ! on a avance dans tous les fichiers VCF
 
@@ -4647,15 +4745,6 @@ program SNP_GWAS
            !print*,' '
            !print*,'varGWAS=',varGWAS,' 10 premiers elements du vecteur vecDoses(:) =',vecDoses(1:10,1)
            !print*,' '
-
-           ! if User wants to convert allelic dosages into dicrete genotypes
-           if(doses_to_geno.eq.1) then
-              ! Transformation dosage → génotype vectorisée
-              matTempDoses2(1:nbind) = 0.0     ! initialisation à 0.0
-              matTempDoses2(vecDoses(1:nbind,1) > 0.5 .and. vecDoses(1:nbind,1) < 1.5) = 1.0
-              matTempDoses2(vecDoses(1:nbind,1) >= 1.5) = 2.0
-              vecDoses(1:nbind,1)=matTempDoses2(1:nbind)
-           endif
 
         endif ! fin du test if(fmttypgwas.eq.'minimac4')
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -6494,10 +6583,12 @@ contains
        call getoption('SelAutoSNPpar',n,x,xc)
        if (n > 0) then
           read(xc(1),*) nbSNPparAuto
-          SelAutoSNPpar=1
-          print*,'Upper bound of Marker number to be automatically chosen via OPTION SelAutoSNPpar :',nbSNPparAuto
-          if(nbSNPparAuto.le.0) then
-             print*,'nbSNPparAuto value given by user is negative: ',nbSNPparAuto
+          if(nbSNPparAuto.ne.-9999) SelAutoSNPpar=1
+          ! -9999 = value to specify no automatic choice of Markers by program
+          if(nbSNPparAuto.eq.-9999) SelAutoSNPpar=0
+          if(nbSNPparAuto.ne.-9999) print*,'Upper bound of Marker number to be automatically chosen via OPTION SelAutoSNPpar :',nbSNPparAuto
+          if((nbSNPparAuto.le.0).and.(nbSNPparAuto.ne.-9999)) then
+             print*,'nbSNPparAuto value given by user is inappropriate: ',nbSNPparAuto
              stop 20
           endif
        endif
@@ -6948,17 +7039,6 @@ contains
              print*,'Variant genotype/allelic dosage file does not exist'
              STOP 21
           endif
-       endif
-       if(trim(fmttypgwas).eq.'minimac4') then
-          do i=1,nbfichvcf
-             write(fxvcf,'(i0)') i
-             INQUIRE (FILE=trim(typgwasfile)//trim(fxvcf)//'.dose.vcf',EXIST=testpresfic)
-             if(testpresfic.eq..false.) then
-                print*,'Variant allelic dosage file number ',i,' does not exist'
-                print*,'Check if the other expected VCF file 1 to ',nbfichvcf,' exist'
-                STOP 21
-             endif
-          enddo
        endif
 
        print '('' Format of genotype file for GWAS: '',t90,a)',trim(fmttypgwas)
